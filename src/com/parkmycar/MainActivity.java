@@ -12,49 +12,40 @@ import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.MapFragment;
 import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.MarkerOptions;
 
 
 
 public class MainActivity extends ActionBarActivity {
 
+	GoogleMap googleMap;
 	 @Override
-	 protected void onCreate(Bundle savedInstanceState) {
+	 protected void onCreate(Bundle savedInstanceState)
+	 {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        GoogleMap mMap;
-		mMap = ((MapFragment) getFragmentManager().
-        		findFragmentById(R.id.map)).getMap();
-        //invoke of map fragment by id from main xml file
-        if (mMap == null) {
-            Toast.makeText(this,"Error in Creation", Toast.LENGTH_LONG)
-                    .show();
+        
+        
+        googleMap = ((MapFragment) getFragmentManager().findFragmentById(R.id.map)).getMap();
+		
+        if (googleMap == null) 
+        {
+            Toast.makeText(this,"Error in Creation", Toast.LENGTH_LONG).show();
             finish();
             return;
         }
-        mMap.setMyLocationEnabled(true);
-        Location currentLocation = getMyLocation();
-        if(currentLocation!=null){
-           LatLng currentCoordinates = new LatLng(
-                                currentLocation.getLatitude(),
-                                currentLocation.getLongitude());
-           mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(currentCoordinates, 10));
+        googleMap.setMyLocationEnabled(true);
+        
+        Location currentLocation = LocationUtils.getMyLocation(this);
+        
+        if(currentLocation!=null)
+        {
+           LatLng currentCoordinates = new LatLng( currentLocation.getLatitude(),currentLocation.getLongitude());
+           googleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(currentCoordinates, 10));
         }
+        
+        LocationUtils.addCarMarker(googleMap,currentLocation);
 	 }
-	 private Location getMyLocation() {
-		    // Get location from GPS if it's available
-		    LocationManager lm = (LocationManager)getSystemService(Context.LOCATION_SERVICE);
-		    Location myLocation = lm.getLastKnownLocation(LocationManager.GPS_PROVIDER);
-
-		    // Location wasn't found, check the next most accurate place for the current location
-		    if (myLocation == null) {
-		        Criteria criteria = new Criteria();
-		        criteria.setAccuracy(Criteria.ACCURACY_COARSE);
-		        // Finds a provider that matches the criteria
-		        String provider = lm.getBestProvider(criteria, true);
-		        // Use the provider to get the last known location
-		        myLocation = lm.getLastKnownLocation(provider);
-		    }
-
-		    return myLocation;
-		}
+	
+	
 }

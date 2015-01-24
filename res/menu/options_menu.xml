@@ -6,4 +6,5 @@
           android:icon="@drawable/ic_search"
           yourapp:showAsAction="always"
           yourapp:actionViewClass="android.widget.SearchView" />
+    	  
 </menu>

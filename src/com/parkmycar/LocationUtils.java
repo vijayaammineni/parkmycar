@@ -102,10 +102,13 @@ public class LocationUtils
 			         );
 			     }
 			 }
+			 
 		 } else {
 			 Toast.makeText(activity, "Failed to fetch data from server!",
 						Toast.LENGTH_SHORT).show();
 		 }
+		 
+		 
 	 }
 	 
 	 public static boolean isServicesEnabled(LocationManager locManager,String provider)

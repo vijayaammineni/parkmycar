@@ -17,12 +17,15 @@ import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.http.message.BasicNameValuePair;
 import org.json.JSONException;
 
+import android.app.Activity;
 import android.app.SearchManager;
 import android.content.Context;
 import android.content.Intent;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
+import android.net.ConnectivityManager;
+import android.net.NetworkInfo;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.provider.Settings;
@@ -42,15 +45,16 @@ public class MainActivity extends ActionBarActivity {
 
 	GoogleMap googleMap;
 	Location currentLocation;
+	public static boolean isAddress = false;
+	
+	public static String CURRENT_LOCATION = "Current Location";
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 		Intent intent = getIntent();
 		String address = null;
-		if (Intent.ACTION_SEARCH.equals(intent.getAction())) {
-			address = intent.getStringExtra(SearchManager.QUERY);
-		}		
+				
 		setContentView(R.layout.activity_main);
 
 		googleMap = ((MapFragment) getFragmentManager().findFragmentById(
@@ -82,15 +86,23 @@ public class MainActivity extends ActionBarActivity {
 						currentLocation.getLatitude(),
 						currentLocation.getLongitude());
 				googleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(
-						currentCoordinates, 20));
-			}			
-			GetParkingLocations getPL = new GetParkingLocations();
-			if (address != null && !address.isEmpty()) {
-				getPL.execute(address);
+						currentCoordinates, 14));
 			}
-			else if (currentLocation != null) {
-				getPL.execute(currentLocation.getLatitude(), 
-						currentLocation.getLongitude());
+			
+			if (Intent.ACTION_SEARCH.equals(intent.getAction())) 
+			{
+				address = intent.getStringExtra(SearchManager.QUERY);
+				GetParkingLocations getPL = new GetParkingLocations(this);
+				if (address != null 
+						&& !address.isEmpty()
+							&& !CURRENT_LOCATION.equals(address)) {
+					getPL.execute(address);
+					isAddress = true;
+				}
+				else if (currentLocation != null) {
+					getPL.execute(currentLocation.getLatitude(), 
+							currentLocation.getLongitude());
+				}
 			}
 		}
 	}
@@ -107,9 +119,11 @@ public class MainActivity extends ActionBarActivity {
 
 		searchView.setSearchableInfo(searchManager
 				.getSearchableInfo(getComponentName()));
+		searchView.setQueryHint(CURRENT_LOCATION);
 		return true;
 	}
-
+	
+	
 	private final LocationListener locationListener = new LocationListener() {
 		public void onLocationChanged(Location location) {
 
@@ -138,65 +152,126 @@ public class MainActivity extends ActionBarActivity {
 	 * Async task to fetch parking locations from DB
 	 * 
 	 */
-	private class GetParkingLocations extends AsyncTask<Object, Void, Void> {
+	private class GetParkingLocations extends AsyncTask<Object, Void, byte[]> 
+	{
+		private Context context;
+		public GetParkingLocations(Context context)
+		{
+			this.context = context;
+			
+		}
+		//check Internet conenction.
+		   private void checkInternetConenction()
+		   {
+		      ConnectivityManager check = (ConnectivityManager) this.context.getSystemService(Context.CONNECTIVITY_SERVICE);
+		      if (check != null) 
+		      {
+		         NetworkInfo[] info = check.getAllNetworkInfo();
+		         if (info != null) 
+		            for (int i = 0; i <info.length; i++) 
+		            if (info[i].getState() == NetworkInfo.State.CONNECTED)
+		            {
+		               Toast.makeText(context, "Internet is connected",
+		               Toast.LENGTH_SHORT).show();
+		            }
+
+		      }
+		      else{
+		         Toast.makeText(context, "not conencted to internet",
+		         Toast.LENGTH_SHORT).show();
+		          }
+		   }
+		   protected void onPreExecute()
+		   {
+		      checkInternetConenction();
+		   }
 
 		@Override
-		protected Void doInBackground(Object ... params) {
+		protected byte[] doInBackground(Object ... params)
+		{
 			
 			HttpClient httpClient = new DefaultHttpClient();			
 			HttpPost httpPost = new HttpPost(ServerUtils.getFullUrl(ServerUtils.PARKING_LOCATIONS_CPATH));			
 			List<NameValuePair> nameValuePairs = new ArrayList<NameValuePair>();
-			String address = (String) params[0];
-			if (address != null 
-					&& !address.isEmpty())
+			
+			if (isAddress)
 			{
+				Object addressObj = params[0];
+				String address = (addressObj != null) ? (String)addressObj:"";
 				nameValuePairs.add(new BasicNameValuePair(JSONKeys.ADDRESS ,address));
 				System.out.print("Address: " + address);
-			} 
+			
+			}
 			else 
 			{
-				Double latitude = (Double) params[1];
-				Double longitude = (Double) params[2];
+				Double latitude = (Double) params[0];
+				Double longitude = (Double) params[1];
 				nameValuePairs.add(new BasicNameValuePair(JSONKeys.LATITUDE, latitude.toString()));
 				nameValuePairs.add(new BasicNameValuePair(JSONKeys.LONGITUDE, longitude.toString()));
 				System.out.print("Latitude: " + latitude + ", Longitude: " + longitude);
 			}	
 			
+			byte [] bytes = null;
+			
 			try
 			{
 				//add data
+		
 				httpPost.setEntity(new UrlEncodedFormEntity(nameValuePairs));
 
 				// Execute HTTP Post Request
 				HttpResponse response = httpClient.execute(httpPost);	
-				
-				if (HttpStatus.SC_OK == response.getStatusLine().getStatusCode()) {
+								
+				if (HttpStatus.SC_OK == response.getStatusLine().getStatusCode()) 
+				{
 					InputStream in = response.getEntity().getContent();					
-					byte [] bytes = IOUtils.toByteArray(in);				
+					bytes = IOUtils.toByteArray(in);				
 					
 //					String sampleJson = "{\"parkingLocations\": [{\"latitude\": 32.9214519, \"longitude\": -117.1681123, \"name\": \"Calle Cristobel\", \"address\":\"Park Road, CalleCristobel, 92126\"}, "
 //							+ "									 {\"latitude\": 32.9223165, \"longitude\": -117.1441226, \"name\": \"Edwards, Mira Mesa\", \"address\":\"Mira Mesa Road, Mira Mesa, 92126\"}]}";
-
-					LocationUtils.addParkingLocations(getParent(), googleMap, new String(bytes));
-//					LocationUtils.addParkingLocations(googleMap, sampleJson);
-				} else {
+					
+				}
+			}
+				/*else {
 					Toast.makeText(getParent(), "Failed to fetch data from server!",
 							Toast.LENGTH_SHORT).show();
-				}
+				}*/
 					        
-			}
-			catch (ClientProtocolException e) {
-				Toast.makeText(getParent(), "Failed to fetch data from server!",
+			
+			catch (ClientProtocolException e)
+			{
+				Toast.makeText(context, "Failed to fetch data from server!",
 						Toast.LENGTH_SHORT).show();
-		    } catch (JSONException e) {
-				Toast.makeText(getParent(), "Failed to parse server response.",
-						Toast.LENGTH_SHORT).show();
-			} catch (IOException e) {
-				Toast.makeText(getParent(), "Failed to fetch data from server!",
+		    } 
+			 catch (IOException e)
+			 {
+				Toast.makeText(context, "Failed to fetch data from server!",
 						Toast.LENGTH_SHORT).show();
 		    }
 		    
-			return null;
+			 return bytes;
 		}
-	}
+		
+		@Override
+		protected void onPostExecute(byte[] result)
+		{
+			try
+			{
+			if(result != null)
+			{
+			LocationUtils.addParkingLocations((Activity)context, googleMap, new String(result));
+			}
+			else
+			{
+				Toast.makeText(getParent(), "Failed to fetch data from server!",
+						Toast.LENGTH_SHORT).show();
+			}
+			}
+			catch (JSONException e) {
+				Toast.makeText(getParent(), "Failed to parse server response.",
+						Toast.LENGTH_SHORT).show();
+			
+		}
+	 }
+  }
 }

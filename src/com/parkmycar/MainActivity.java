@@ -28,6 +28,7 @@ import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.provider.SearchRecentSuggestions;
 import android.provider.Settings;
 import android.support.v7.app.ActionBarActivity;
 import android.view.Menu;
@@ -47,7 +48,7 @@ public class MainActivity extends ActionBarActivity {
 	Location currentLocation;
 	public static boolean isAddress = false;
 	
-	public static String CURRENT_LOCATION = "Current Location";
+	public static String CURRENT_LOCATION = "My Location";
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -86,12 +87,15 @@ public class MainActivity extends ActionBarActivity {
 						currentLocation.getLatitude(),
 						currentLocation.getLongitude());
 				googleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(
-						currentCoordinates, 14));
+						currentCoordinates, 12));
 			}
 			
 			if (Intent.ACTION_SEARCH.equals(intent.getAction())) 
 			{
 				address = intent.getStringExtra(SearchManager.QUERY);
+		        SearchRecentSuggestions suggestions = new SearchRecentSuggestions(this,
+		        		SearchSuggestionProvider.AUTHORITY, SearchSuggestionProvider.MODE);
+		        suggestions.saveRecentQuery(address, null);		        
 				GetParkingLocations getPL = new GetParkingLocations(this);
 				if (address != null 
 						&& !address.isEmpty()
@@ -119,7 +123,7 @@ public class MainActivity extends ActionBarActivity {
 
 		searchView.setSearchableInfo(searchManager
 				.getSearchableInfo(getComponentName()));
-		searchView.setQueryHint(CURRENT_LOCATION);
+		searchView.setQuery(CURRENT_LOCATION,false);
 		return true;
 	}
 	

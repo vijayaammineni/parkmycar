@@ -11,6 +11,7 @@ import android.location.LocationListener;
 import android.location.LocationManager;
 import android.widget.Toast;
 
+import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.LatLng;
@@ -60,7 +61,7 @@ public class LocationUtils
 	                             .position(new LatLng(cLocation.getLatitude(),cLocation.getLongitude()))
 	                             .title("CurrentLocation")
 	                             .draggable(true)
-	                             
+	                            
 	         );
 	     }
 	 }
@@ -100,6 +101,8 @@ public class LocationUtils
 			                             .draggable(true)
 			                             
 			         );
+			        /* googleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(
+			        		 new LatLng(latitude, longitude), 11));*/
 			     }
 			 }
 			 

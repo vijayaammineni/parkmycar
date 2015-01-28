@@ -35,7 +35,11 @@
         <meta-data
 		    android:name="com.google.android.maps.v2.API_KEY"
 		    android:value="AIzaSyAwyOR6838ZuDexiIkmM5eZizDIw3jtt4k"/>
-        
+        <provider
+            android:name=".SearchSuggestionProvider"
+            android:authorities="com.parkmycar.SearchSuggestionProvider" >
+        </provider>
+
          <meta-data
                 android:name="android.app.default_searchable"
                 android:value=".SearchActivity" />

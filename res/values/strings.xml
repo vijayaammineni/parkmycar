@@ -7,5 +7,10 @@
     <string name="action_settings">Settings</string>
     <string name="search_title">Search</string>
     <string name="search_hint">Enter address</string>
+     <string name="view">View Details</string>
+     <string name="colHeader1">DayOfWeek</string>
+     <string name="colHeader2">Price/hr</string>
+     <string name="colHeader3">Price/Day</string>
+     <string name="navigate_btn">Navigate</string>
     
 </resources>

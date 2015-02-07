@@ -9,6 +9,7 @@ public class ServerUtils {
 	private static int SERVER_PORT = 80;
 	private static String PROTOCOL = "http";
 	public static String PARKING_LOCATIONS_CPATH = "/ParkingLocations";
+	public static String PARKING_LOCATION_DETAILS_PATH = "/ParkingLocationDetails";
 	
 	public static URI getFullUrl (String contextPath) {
 		try {

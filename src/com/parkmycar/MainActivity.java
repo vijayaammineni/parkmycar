@@ -33,6 +33,9 @@ import android.provider.Settings;
 import android.support.v7.app.ActionBarActivity;
 import android.view.Menu;
 import android.view.MenuInflater;
+import android.view.View;
+import android.view.ViewGroup.LayoutParams;
+import android.widget.Button;
 import android.widget.SearchView;
 import android.widget.Toast;
 
@@ -90,6 +93,21 @@ public class MainActivity extends ActionBarActivity {
 						currentCoordinates, 12));
 			}
 			
+			Button button = new Button(this);
+			button.setText("Click me");
+			addContentView(button, new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT));
+
+			button.setOnClickListener(new View.OnClickListener() {
+
+			                @Override
+			                public void onClick(View v) {
+			                    // TODO Auto-generated method stub
+			                    Intent detailsIntent=new Intent(MainActivity.this,DisplayDetailsActivity.class);
+			                    detailsIntent.putExtra("id", 3);
+			                    startActivity(detailsIntent);
+
+			                }
+			            });
 			if (Intent.ACTION_SEARCH.equals(intent.getAction())) 
 			{
 				address = intent.getStringExtra(SearchManager.QUERY);

@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:layout_centerHorizontal="true" >
+    
+    <TextView
+       android:id="@+id/address"
+       android:gravity="center"
+       android:layout_width="wrap_content"
+       android:layout_height="wrap_content"/>
+    <TableLayout
+	    android:layout_width="fill_parent"
+	    android:layout_height="wrap_content"
+	    android:stretchColumns="1"
+	    android:shrinkColumns="0" >
+	    <TableRow>
+		<TextView
+	       android:id="@+id/icon_up_vote"
+	       android:gravity="center"
+	       android:layout_width="wrap_content"
+	       android:layout_height="wrap_content"
+	       android:drawableTop="@drawable/ic_up_vote"
+		   android:ellipsize="end"
+	       android:singleLine="true"
+	       android:textSize="20sp"/>
+	     <TextView
+	       android:id="@+id/icon_down_vote"
+	       android:layout_width="fill_parent"
+	       android:layout_height="wrap_content"
+		   android:layout_weight="1"
+	       android:drawableTop="@drawable/ic_down_vote"
+	       android:textSize="20sp"
+		   android:singleLine="true"
+	       android:ellipsize="none"
+	       android:gravity="center" />
+	    </TableRow>
+	</TableLayout>
+	<TableLayout
+        android:id="@+id/header"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@android:color/black">
+        <TableRow>
+            <TextView
+                android:textColor="@android:color/black"
+                android:gravity="start"
+                android:paddingRight="5dp"
+                android:background="@android:color/darker_gray"
+                android:text="@string/colHeader1" />
+            <TextView
+                android:textColor="@android:color/black"
+                android:gravity="center_horizontal"
+                android:paddingRight="2dp"
+                android:background="@android:color/darker_gray"
+                android:text="@string/colHeader2"/>
+            <TextView
+                android:textColor="@android:color/black"
+                android:gravity="center_horizontal"
+                android:layout_weight="1"
+                android:background="@android:color/darker_gray"
+                android:text="@string/colHeader3" />
+        </TableRow>
+    </TableLayout>
+     <TableLayout
+        android:id="@+id/priceTableLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:padding="10dp"
+        android:shrinkColumns="*"
+        android:stretchColumns="*" >
+    </TableLayout>
+    <Button android:id="@+id/button"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/navigate_btn"
+            />
+</LinearLayout>
+    
+        

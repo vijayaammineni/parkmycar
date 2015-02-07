@@ -5,22 +5,38 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import android.app.Activity;
+import android.content.Context;
+import android.content.Intent;
 import android.location.Criteria;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.View.OnClickListener;
+import android.view.ViewGroup;
+import android.widget.Button;
 import android.widget.Toast;
 
-import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
 import com.parkmycar.json.JSONKeys;
 
 public class LocationUtils 
 {
-
+    private Context context;
+	public LocationUtils() {
+		// TODO Auto-generated constructor stub
+	}
+	
+	public LocationUtils(Context context)
+	{
+		this.context = context;
+	}
+	
 	 public static Location getMyLocation(LocationManager lm,LocationListener listner) 
 	 {
 		 	Location myLocation = null;
@@ -81,7 +97,7 @@ public class LocationUtils
 	     }
 	 }
 	 
-	 public static void addParkingLocations(Activity activity, GoogleMap googleMap, String json) throws JSONException
+	 public static void addParkingLocations(final Activity activity, GoogleMap googleMap, String json) throws JSONException
 	 {
 		 JSONObject locations = new JSONObject(json);
 		 JSONArray parkingLocations = locations.getJSONArray(JSONKeys.PARKING_LOCATIONS);
@@ -97,13 +113,13 @@ public class LocationUtils
 				 if(null != googleMap){
 			         googleMap.addMarker(new MarkerOptions()
 			                             .position(new LatLng(latitude, longitude))
-			                             .title(name + ", " + "Address: " + address)
+			                             .title(name)
+			                             .snippet(address)
 			                             .draggable(true)
 			                             
 			         );
-			        /* googleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(
-			        		 new LatLng(latitude, longitude), 11));*/
-			     }
+			        			     
+				 }
 			 }
 			 
 		 } else {
@@ -111,6 +127,30 @@ public class LocationUtils
 						Toast.LENGTH_SHORT).show();
 		 }
 		 
+		 LayoutInflater inflater = (LayoutInflater) activity
+        		 .getSystemService( Context.LAYOUT_INFLATER_SERVICE );
+
+         
+         googleMap.setInfoWindowAdapter(new MarkerPopupCustom(inflater));
+         
+        ViewGroup infoWindow =(ViewGroup)inflater.inflate(R.layout.popup,null);
+         
+         Button infoBtn = (Button) infoWindow.findViewById(R.id.button1);
+ 	    
+         infoBtn.setOnClickListener(new OnClickListener() 
+ 	    {
+ 			
+ 			@Override
+ 			public void onClick(View v) 
+ 			{
+ 				Intent myIntent = new Intent(activity, DisplayDetailsActivity.class);
+ 				myIntent.putExtra("key", 1); //Optional parameters
+ 				activity.startActivity(myIntent);
+ 				
+ 				
+ 			}
+ 		});
+
 		 
 	 }
 	 

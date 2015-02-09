@@ -20,8 +20,10 @@ public class JSONKeys {
 	public static final String HOURLY_PRICE = "hourlyPrice";
 	public static final String DAY_OF_WEEK = "DayOfWeek";
 	
-	public static final String AVAILABILITY_LIST = "availabilityList";
-	public static final String IS_AVAILABLE = "availability";
-	public static final String TIME_STAMP = "timeStamp";
+	public static final String FEDDBACK_LIST = "availabilityObj";
+	public static final String AVAILABLE_VOTES = "availableVotes";
+	public static final String NOTAVAILABLE_VOTES = "unAvailableVotes";
+	public static final String CHECKOUT_NUM = "parkedNum";
+	public static final String PARKED_NUM = "checkedOutNum";
 	
 }

@@ -22,14 +22,11 @@ import android.app.SearchManager;
 import android.content.Context;
 import android.content.Intent;
 import android.location.Location;
-import android.location.LocationListener;
-import android.location.LocationManager;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.provider.SearchRecentSuggestions;
-import android.provider.Settings;
 import android.support.v7.app.ActionBarActivity;
 import android.view.Menu;
 import android.view.MenuInflater;
@@ -69,54 +66,44 @@ public class MainActivity extends ActionBarActivity {
 			finish();
 			return;
 		}
-
-		// Get location from GPS if it's available
-		LocationManager lm = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
-
-		if (!LocationUtils.isServicesEnabled(lm, LocationManager.GPS_PROVIDER)) {
-			// Provider not enabled, prompt user to enable it
-			Toast.makeText(this, R.string.please_turn_on_gps, Toast.LENGTH_LONG)
-					.show();
-			Intent myIntent = new Intent(
-					Settings.ACTION_LOCATION_SOURCE_SETTINGS);
-			startActivity(myIntent);
+		
+		LocationUtils lu = new LocationUtils(this, getApplicationContext());
+		
+		googleMap.setMyLocationEnabled(true);
+		currentLocation = lu.getMyLocation();
+		if (currentLocation != null) {
+			LatLng currentCoordinates = new LatLng(
+					currentLocation.getLatitude(),
+					currentLocation.getLongitude());
+			googleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(
+					currentCoordinates, 12));
 		}
 
-		else {
-			googleMap.setMyLocationEnabled(true);
-			currentLocation = LocationUtils.getMyLocation(lm, locationListener);
-			if (currentLocation != null) {
-				LatLng currentCoordinates = new LatLng(
-						currentLocation.getLatitude(),
-						currentLocation.getLongitude());
-				googleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(
-						currentCoordinates, 12));
+		Button button = new Button(this);
+		button.setText("Click me");
+		addContentView(button, new LayoutParams(LayoutParams.WRAP_CONTENT,
+				LayoutParams.WRAP_CONTENT));
+
+		button.setOnClickListener(new View.OnClickListener() {
+
+			@Override
+			public void onClick(View v) {
+				// TODO Auto-generated method stub
+				Intent detailsIntent = new Intent(MainActivity.this,
+						DisplayDetailsActivity.class);
+				detailsIntent.putExtra("id", 3);
+				startActivity(detailsIntent);
+
 			}
-			
-			Button button = new Button(this);
-			button.setText("Click me");
-			addContentView(button, new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT));
-
-			button.setOnClickListener(new View.OnClickListener() {
-
-			                @Override
-			                public void onClick(View v) {
-			                    // TODO Auto-generated method stub
-			                    Intent detailsIntent=new Intent(MainActivity.this,DisplayDetailsActivity.class);
-			                    detailsIntent.putExtra("id", 3);
-			                    startActivity(detailsIntent);
-
-			                }
-			            });
-			if (Intent.ACTION_SEARCH.equals(intent.getAction())) 
-			{
-				address = intent.getStringExtra(SearchManager.QUERY);
-		        SearchRecentSuggestions suggestions = new SearchRecentSuggestions(this,
-		        		SearchSuggestionProvider.AUTHORITY, SearchSuggestionProvider.MODE);
-		        suggestions.saveRecentQuery(address, null);		        
-				GetParkingLocations getPL = new GetParkingLocations(this);
-				if (address != null 
-						&& !address.isEmpty()
+		});
+		if (Intent.ACTION_SEARCH.equals(intent.getAction())) {
+			address = intent.getStringExtra(SearchManager.QUERY);
+			SearchRecentSuggestions suggestions = new SearchRecentSuggestions(
+					this, SearchSuggestionProvider.AUTHORITY,
+					SearchSuggestionProvider.MODE);
+			suggestions.saveRecentQuery(address, null);
+			GetParkingLocations getPL = new GetParkingLocations(this);
+			if (address != null && !address.isEmpty()
 							&& !CURRENT_LOCATION.equals(address)) {
 					getPL.execute(address);
 					isAddress = true;
@@ -126,7 +113,6 @@ public class MainActivity extends ActionBarActivity {
 							currentLocation.getLongitude());
 				}
 			}
-		}
 	}
 
 	@Override
@@ -145,31 +131,6 @@ public class MainActivity extends ActionBarActivity {
 		return true;
 	}
 	
-	
-	private final LocationListener locationListener = new LocationListener() {
-		public void onLocationChanged(Location location) {
-
-		}
-
-		@Override
-		public void onProviderDisabled(String provider) {
-			// TODO Auto-generated method stub
-
-		}
-
-		@Override
-		public void onProviderEnabled(String provider) {
-			// TODO Auto-generated method stub
-
-		}
-
-		@Override
-		public void onStatusChanged(String provider, int status, Bundle extras) {
-			// TODO Auto-generated method stub
-
-		}
-	};
-
 	/**
 	 * Async task to fetch parking locations from DB
 	 * 
@@ -279,15 +240,15 @@ public class MainActivity extends ActionBarActivity {
 		{
 			try
 			{
-			if(result != null)
-			{
-			LocationUtils.addParkingLocations((Activity)context, googleMap, new String(result));
-			}
-			else
-			{
-				Toast.makeText(getParent(), "Failed to fetch data from server!",
-						Toast.LENGTH_SHORT).show();
-			}
+				if(result != null)
+				{
+					LocationUtils.addParkingLocations((Activity)context, googleMap, new String(result));
+				}
+				else
+				{
+					Toast.makeText(getParent(), "Failed to fetch data from server!",
+							Toast.LENGTH_SHORT).show();
+				}
 			}
 			catch (JSONException e) {
 				Toast.makeText(getParent(), "Failed to parse server response.",

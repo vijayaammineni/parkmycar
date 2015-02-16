@@ -6,5 +6,15 @@
           android:icon="@drawable/ic_search"
           yourapp:showAsAction="always"
           yourapp:actionViewClass="android.widget.SearchView" />
+    <!--  addint to menu items for start & stop reminder buttons -->
+    <!--  @author: Bhavya -->
+    <item android:id="@+id/startReminder"
+        android:title="@string/start_reminder"
+        android:icon="@android:drawable/ic_lock_idle_alarm"
+        android:showAsAction="never" />
+    <item android:id="@+id/cancelReminder"
+        android:title="@string/stop_reminder"
+        android:icon="@android:drawable/ic_delete"
+        android:showAsAction="never" />
     	  
 </menu>

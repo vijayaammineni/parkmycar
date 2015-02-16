@@ -6,6 +6,8 @@
     <string name="hello_world">Hello world!</string>
     <string name="action_settings">Settings</string>
     <string name="search_title">Search</string>
+    <string name="start_reminder">Start Reminder</string>
+    <string name="stop_reminder">Stop Reminder</string>
     <string name="search_hint">Enter address</string>
      <string name="view">View Details</string>
      <string name="colHeader1">DayOfWeek</string>

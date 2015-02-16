@@ -3,7 +3,9 @@ package com.parkmycar;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.List;
+import java.util.Locale;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.http.HttpResponse;
@@ -18,21 +20,33 @@ import org.apache.http.message.BasicNameValuePair;
 import org.json.JSONException;
 
 import android.app.Activity;
+import android.app.AlarmManager;
+import android.app.AlertDialog;
+import android.app.Notification;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.app.SearchManager;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
+import android.graphics.Color;
 import android.location.Location;
+import android.media.RingtoneManager;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
+import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.provider.SearchRecentSuggestions;
 import android.support.v7.app.ActionBarActivity;
 import android.view.Menu;
 import android.view.MenuInflater;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup.LayoutParams;
+import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.LinearLayout;
 import android.widget.SearchView;
 import android.widget.Toast;
 
@@ -46,6 +60,9 @@ public class MainActivity extends ActionBarActivity {
 
 	GoogleMap googleMap;
 	Location currentLocation;
+	
+	private PendingIntent pendingIntent;
+	
 	public static boolean isAddress = false;
 	
 	public static String CURRENT_LOCATION = "My Location";
@@ -78,12 +95,12 @@ public class MainActivity extends ActionBarActivity {
 			googleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(
 					currentCoordinates, 12));
 		}
-
+		
 		Button button = new Button(this);
 		button.setText("Click me");
 		addContentView(button, new LayoutParams(LayoutParams.WRAP_CONTENT,
 				LayoutParams.WRAP_CONTENT));
-
+		//attach a clik listener to click me button
 		button.setOnClickListener(new View.OnClickListener() {
 
 			@Override
@@ -96,6 +113,9 @@ public class MainActivity extends ActionBarActivity {
 
 			}
 		});
+
+
+
 		if (Intent.ACTION_SEARCH.equals(intent.getAction())) {
 			address = intent.getStringExtra(SearchManager.QUERY);
 			SearchRecentSuggestions suggestions = new SearchRecentSuggestions(
@@ -114,6 +134,120 @@ public class MainActivity extends ActionBarActivity {
 				}
 			}
 	}
+	
+	@Override  
+    public boolean onOptionsItemSelected(MenuItem item) {  
+        switch (item.getItemId()) {  
+            case R.id.startReminder:  
+              startNotificationAlarm();  
+            return true;     
+            case R.id.cancelReminder:  
+                stopNotificationAlarm();  
+              return true;     
+            default:  
+              return super.onOptionsItemSelected(item);  
+        }  
+    }
+	
+	//@author: Bhavya
+	public void startNotificationAlarm()	
+	{
+		AlertDialog.Builder builderSingle = new AlertDialog.Builder(
+                MainActivity.this);
+        builderSingle.setIcon(R.drawable.ic_launcher);
+        builderSingle.setTitle("Remind me in:");
+        final String[] names = {"10 minutes",
+        					"20 minutes",
+        					"25 minutes",
+        					"40 minutes",
+        					"55 minutes",
+        					"1 hour",
+        					"1 hour 15 minutes",
+        					"1 hour 25 minutes",
+        					"1 hour 40 minutes",
+        					"1 hour 55 minutes",
+        					"2 hours 10 minutes",
+        					"2 hours 25 minutes",
+        					"2 hours 40 minutes",
+        					"2 hours 55 minutes"};
+        final int[] timings = {
+        		10, 20, 25, 40, 55, 60, 76, 85, 100, 115, 130, 145, 160, 185
+        };
+        final ArrayAdapter<String> arrayAdapter = new ArrayAdapter<String>(
+                MainActivity.this,
+                android.R.layout.select_dialog_item,
+                names);
+                
+        
+        builderSingle.setAdapter(arrayAdapter,
+                new DialogInterface.OnClickListener() {
+
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                    	
+                    	//Intent to start the background service when alarm is set
+                		Intent notificationIntent = new Intent(MainActivity.this, NotificationService.class);
+                		pendingIntent = PendingIntent.getService(MainActivity.this, 0, notificationIntent, 0);
+                		AlarmManager alarmManager = (AlarmManager)getSystemService(ALARM_SERVICE);
+                		Calendar calendar = Calendar.getInstance();
+                		calendar.setTimeInMillis(System.currentTimeMillis());
+                		calendar.add(Calendar.MINUTE, timings[which]);
+                		alarmManager.set(AlarmManager.RTC_WAKEUP, calendar.getTimeInMillis(), pendingIntent);
+                	
+                		Toast.makeText(MainActivity.this, "Reminder Set Successful!", Toast.LENGTH_SHORT).show();
+                        dialog.dismiss();
+                        
+                        //alert the user with another notification, that says remider has set
+                        
+                        // Set the icon, scrolling text and timestamp
+                		Uri soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
+                		
+                		// The PendingIntent to launch our activity if the user selects this notification
+                        PendingIntent contentIntent = PendingIntent.getActivity(MainActivity.this, 0,
+                                new Intent(MainActivity.this, MainActivity.class), 0);
+                        
+                		Notification notification = new Notification.Builder(MainActivity.this)
+                							.setContentTitle("ParkMyCar")
+                							.setContentText("Reminder is set to: "+calendar.get(Calendar.HOUR)+":"+calendar.get(Calendar.MINUTE)+" "+calendar.getDisplayName(Calendar.AM_PM, Calendar.SHORT, Locale.US))
+                							.setWhen(System.currentTimeMillis())
+                							.setSound(soundUri)
+                							.setSmallIcon(R.drawable.ic_launcher)
+                							.setContentIntent(contentIntent)
+                							.setVibrate(new long[] { 1000, 1000, 1000, 1000, 1000 })
+                							.setLights(Color.RED, 3000, 3000)
+                							.build();
+                						
+                        // clear notification after pressing:
+                        notification.flags |= Notification.FLAG_AUTO_CANCEL;
+
+                        // Send the notification.
+                        
+                        NotificationManager mNM = (NotificationManager)getSystemService(NOTIFICATION_SERVICE);
+                		if(mNM !=null){
+                			mNM.cancel(123456);
+                			mNM.cancel(123457);
+                        	mNM.notify(123457, notification);
+                		}
+                    }
+                });
+        builderSingle.show();
+        
+		
+	}
+//@author: Bhavya
+public void stopNotificationAlarm()
+{
+	 AlarmManager alarmManager = (AlarmManager)getSystemService(ALARM_SERVICE);
+	 //cancel all the alarms associated with pendingIntent
+	 alarmManager.cancel(pendingIntent);
+	 NotificationManager mNM = (NotificationManager)getSystemService(NOTIFICATION_SERVICE);
+		if(mNM !=null){
+			mNM.cancel(123456);
+			mNM.cancel(123457);
+		}
+	 Toast.makeText(MainActivity.this, "Reminder deleted", Toast.LENGTH_SHORT).show();
+
+}
 
 	@Override
 	public boolean onCreateOptionsMenu(Menu menu) {

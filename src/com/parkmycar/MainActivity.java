@@ -1,7 +1,7 @@
 package com.parkmycar;
 
-import java.io.IOException;
 import java.io.InputStream;
+import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -9,15 +9,18 @@ import org.apache.commons.io.IOUtils;
 import org.apache.http.HttpResponse;
 import org.apache.http.HttpStatus;
 import org.apache.http.NameValuePair;
-import org.apache.http.client.ClientProtocolException;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.entity.UrlEncodedFormEntity;
+import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.http.message.BasicNameValuePair;
+import org.json.JSONArray;
 import org.json.JSONException;
+import org.json.JSONObject;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.app.SearchManager;
 import android.content.Context;
 import android.content.Intent;
@@ -30,6 +33,7 @@ import android.provider.SearchRecentSuggestions;
 import android.support.v7.app.ActionBarActivity;
 import android.view.Menu;
 import android.view.MenuInflater;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup.LayoutParams;
 import android.widget.Button;
@@ -131,13 +135,19 @@ public class MainActivity extends ActionBarActivity {
 		return true;
 	}
 	
+	@Override
+	public boolean onOptionsItemSelected(MenuItem item) 
+	{
+	 return super.onOptionsItemSelected(item);
+	}
 	/**
 	 * Async task to fetch parking locations from DB
 	 * 
 	 */
-	private class GetParkingLocations extends AsyncTask<Object, Void, byte[]> 
+	private class GetParkingLocations extends AsyncTask<Object, Void, AsyncTaskResult<byte[]>> 
 	{
 		private Context context;
+		HttpClient httpClient = new DefaultHttpClient();
 		public GetParkingLocations(Context context)
 		{
 			this.context = context;
@@ -170,34 +180,64 @@ public class MainActivity extends ActionBarActivity {
 		   }
 
 		@Override
-		protected byte[] doInBackground(Object ... params)
+		protected AsyncTaskResult<byte[]> doInBackground(Object ... params)
 		{
+			Double latitude = 90.0;
+			Double longitude = 180.0;
 			
-			HttpClient httpClient = new DefaultHttpClient();			
 			HttpPost httpPost = new HttpPost(ServerUtils.getFullUrl(ServerUtils.PARKING_LOCATIONS_CPATH));			
 			List<NameValuePair> nameValuePairs = new ArrayList<NameValuePair>();
-			
+			byte [] bytes = null;
+			try{
+				
 			if (isAddress)
 			{
-				Object addressObj = params[0];
-				String address = (addressObj != null) ? (String)addressObj:"";
-				nameValuePairs.add(new BasicNameValuePair(JSONKeys.ADDRESS ,address));
-				System.out.print("Address: " + address);
+				byte[] addressBytes = null;
+				StringBuilder url = new StringBuilder("http://maps.googleapis.com/maps/api/geocode/json?address=");
+				String addressObj = (String)params[0];
+				url.append(URLEncoder.encode(addressObj,"UTF-8")+"+&sensor=true_or_false");
+				HttpResponse pageResp = httpClient.execute(new HttpGet(url.toString()));
+				System.out.print("Address: " + addressObj);
+				InputStream inAddress = pageResp.getEntity().getContent();					
+				addressBytes = IOUtils.toByteArray(inAddress);	
+				String jsonAddressStr = new String(addressBytes);
+				JSONObject addresses = new JSONObject(jsonAddressStr);
+				JSONArray results = addresses.getJSONArray(JSONKeys.RESULTS);
+				String status = addresses.getString(JSONKeys.STATUS);
+				if(!status.equalsIgnoreCase("OK") || results.length() > 1)
+				{
+					return new AsyncTaskResult<byte[]>(new InvalidAddressException("Please specify valid address."));	
+				}
+				if(results != null)
+				{
+					for(int i=0;i<results.length();i++)
+					{
+						JSONObject geometry = results.getJSONObject(i);
+						JSONObject geometryAray = geometry.getJSONObject(JSONKeys.GEOMETRY);  
+						if(geometryAray != null)
+						{
+							
+								JSONObject location = geometryAray.getJSONObject(JSONKeys.LOCATION);
+								longitude = location.getDouble(JSONKeys.LNG_GEOCODE);
+								latitude = location.getDouble(JSONKeys.LAT_GEOCODE);
+							
+						}
+					}
+				}
+				
 			
 			}
 			else 
 			{
-				Double latitude = (Double) params[0];
-				Double longitude = (Double) params[1];
-				nameValuePairs.add(new BasicNameValuePair(JSONKeys.LATITUDE, latitude.toString()));
-				nameValuePairs.add(new BasicNameValuePair(JSONKeys.LONGITUDE, longitude.toString()));
+				latitude = (Double) params[0];
+				longitude = (Double) params[1];
 				System.out.print("Latitude: " + latitude + ", Longitude: " + longitude);
 			}	
 			
-			byte [] bytes = null;
+		
+				nameValuePairs.add(new BasicNameValuePair(JSONKeys.LATITUDE, latitude.toString()));
+				nameValuePairs.add(new BasicNameValuePair(JSONKeys.LONGITUDE, longitude.toString()));
 			
-			try
-			{
 				//add data
 		
 				httpPost.setEntity(new UrlEncodedFormEntity(nameValuePairs));
@@ -210,45 +250,46 @@ public class MainActivity extends ActionBarActivity {
 					InputStream in = response.getEntity().getContent();					
 					bytes = IOUtils.toByteArray(in);				
 					
-//					String sampleJson = "{\"parkingLocations\": [{\"latitude\": 32.9214519, \"longitude\": -117.1681123, \"name\": \"Calle Cristobel\", \"address\":\"Park Road, CalleCristobel, 92126\"}, "
-//							+ "									 {\"latitude\": 32.9223165, \"longitude\": -117.1441226, \"name\": \"Edwards, Mira Mesa\", \"address\":\"Mira Mesa Road, Mira Mesa, 92126\"}]}";
-					
 				}
+				return new AsyncTaskResult<byte[]>(bytes);
 			}
-				/*else {
-					Toast.makeText(getParent(), "Failed to fetch data from server!",
-							Toast.LENGTH_SHORT).show();
-				}*/
-					        
-			
-			catch (ClientProtocolException e)
+			      
+			catch (Exception e)
 			{
-				Toast.makeText(context, "Failed to fetch data from server!",
-						Toast.LENGTH_SHORT).show();
-		    } 
-			 catch (IOException e)
-			 {
-				Toast.makeText(context, "Failed to fetch data from server!",
-						Toast.LENGTH_SHORT).show();
-		    }
+				System.out.print(e.getMessage());
+				return new AsyncTaskResult<byte[]>("Failed to fetch data from server!");
+				}
 		    
-			 return bytes;
+			
 		}
 		
 		@Override
-		protected void onPostExecute(byte[] result)
+		protected void onPostExecute(AsyncTaskResult<byte[]> result)
 		{
 			try
 			{
+				 if ( result.getMessage()!= null || result.getError()!= null)
+
+				 {
+					AlertDialog.Builder builder = new AlertDialog.Builder(
+							this.context);
+					builder.setTitle("Info");
+					builder.setMessage(result.getMessage());
+					builder.setPositiveButton("OK", null);
+					AlertDialog dialog = builder.show();
+
+					/*// Must call show() prior to fetching text view
+					TextView messageView = (TextView) dialog
+							.findViewById(android.R.id.message);
+					messageView.setGravity(Gravity.CENTER);
+					*/ 
+					return;
+		            }
 				if(result != null)
 				{
-					LocationUtils.addParkingLocations((Activity)context, googleMap, new String(result));
+					LocationUtils.addParkingLocations((Activity)context, googleMap, new String(result.getResult()));
 				}
-				else
-				{
-					Toast.makeText(getParent(), "Failed to fetch data from server!",
-							Toast.LENGTH_SHORT).show();
-				}
+				
 			}
 			catch (JSONException e) {
 				Toast.makeText(getParent(), "Failed to parse server response.",

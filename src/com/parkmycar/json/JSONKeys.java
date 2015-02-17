@@ -26,4 +26,12 @@ public class JSONKeys {
 	public static final String CHECKOUT_NUM = "parkedNum";
 	public static final String PARKED_NUM = "checkedOutNum";
 	
+	public static final String RESULTS	= "results";
+	public static final String STATUS = "status";
+	public static final String GEOMETRY	= "geometry";
+	public static final String LOCATION = "location";
+	public static final String LAT_GEOCODE = "lat";
+	public static final String LNG_GEOCODE = "lng";
+	
+	
 }

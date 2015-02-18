@@ -87,10 +87,10 @@ public class MainActivity extends ActionBarActivity {
 		}
 
 		LocationUtils lu = new LocationUtils(this, getApplicationContext());
-
-		googleMap.setMyLocationEnabled(true);
+        
 		currentLocation = lu.getMyLocation(false);
 		if (currentLocation != null) {
+			googleMap.setMyLocationEnabled(true);
 			LatLng currentCoordinates = new LatLng(
 					currentLocation.getLatitude(),
 					currentLocation.getLongitude());

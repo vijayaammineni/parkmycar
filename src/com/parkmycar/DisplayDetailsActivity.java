@@ -61,9 +61,8 @@ public class DisplayDetailsActivity extends Activity implements OnClickListener 
 		btn.setVisibility(View.VISIBLE);
 		final LocationUtils lu = new LocationUtils(this,getApplicationContext());
 		btn.setOnClickListener(new View.OnClickListener() {
-		public void onClick(View v) {
-			
-			Location location = lu.getMyLocation();
+		public void onClick(View v) {			
+			Location location = lu.getMyLocation(true);
 			StringBuffer sb = new StringBuffer();
 			sb.append("http://maps.google.com/maps?saddr=")
 			  .append(location.getLatitude())

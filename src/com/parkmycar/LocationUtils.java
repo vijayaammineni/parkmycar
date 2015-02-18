@@ -27,6 +27,10 @@ import com.google.android.gms.maps.model.MarkerOptions;
 import com.parkmycar.json.JSONKeys;
 
 public class LocationUtils {
+	
+	public static Double DEFAULT_LATITUDE = 32.7150;
+	public static Double DEFAULT_LONGITUDE = -117.1625;
+	public static int DEFAULT_ZOOM_LEVEL = 14;
 	private Context context;
 	private Activity activity;
 	private LocationManager lm;
@@ -62,11 +66,12 @@ public class LocationUtils {
 				.getSystemService(Context.LOCATION_SERVICE);
 	}
 
-	public Location getMyLocation() {
+	public Location getMyLocation(boolean promptForGpsSettings) {
 		// Get location from GPS if it's available
 		Location myLocation = lm
 				.getLastKnownLocation(LocationManager.GPS_PROVIDER);
-		if (!isServicesEnabled(lm, LocationManager.GPS_PROVIDER)) {
+		if (!isServicesEnabled(lm, LocationManager.GPS_PROVIDER)
+				&& promptForGpsSettings) {
 			// Provider not enabled, prompt user to enable it
 			Toast.makeText(context, R.string.please_turn_on_gps,
 					Toast.LENGTH_LONG).show();

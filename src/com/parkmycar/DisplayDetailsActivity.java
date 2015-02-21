@@ -31,6 +31,7 @@ import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.view.View;
+import android.view.Window;
 import android.widget.Button;
 import android.widget.TableLayout;
 import android.widget.TableRow;
@@ -52,7 +53,7 @@ public class DisplayDetailsActivity extends Activity implements OnClickListener 
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 		Intent intent = getIntent();
-		int value = intent.getIntExtra("id", 3);
+		int value = intent.getIntExtra(com.parkmycar.Constants.PARKING_LOCATION_ID, 0);
 		setContentView(R.layout.activity_details);
 		text_view = (TextView) findViewById(R.id.address);
 		availability_text = (TextView)findViewById(R.id.availabilityText);
@@ -81,7 +82,6 @@ public class DisplayDetailsActivity extends Activity implements OnClickListener 
 		GetParkingLocationDetails detailsAsyncTask = new GetParkingLocationDetails(
 				this);
 		detailsAsyncTask.execute(value);
-
 	}
 
 	public void setFields(Context context, String result) throws JSONException {

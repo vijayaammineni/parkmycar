@@ -1,5 +1,7 @@
 package com.parkmycar;
 
+import java.util.HashMap;
+
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -23,6 +25,7 @@ import android.widget.Toast;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
 import com.parkmycar.json.JSONKeys;
 
@@ -122,7 +125,7 @@ public class LocationUtils {
 
 	public static void addCarMarker(GoogleMap googleMap, Location cLocation) {
 
-		/** Make sure that the map has been initialised **/
+		/** Make sure that the map has been initialized **/
 		if (null != googleMap) {
 			googleMap.addMarker(new MarkerOptions()
 					.position(
@@ -138,14 +141,15 @@ public class LocationUtils {
 	}
 
 	public static void addParkingLocations(final Activity activity,
-			GoogleMap googleMap, String json) throws JSONException {
+			GoogleMap googleMap, String json, HashMap<Marker, Integer> markers) throws JSONException {
+		
 		JSONObject locations = new JSONObject(json);
 		JSONArray parkingLocations = locations
 				.getJSONArray(JSONKeys.PARKING_LOCATIONS);
-
 		if (parkingLocations != null) {
-			for (int i = 0; i < parkingLocations.length(); i++) {
+			for (int i = 0; i < parkingLocations.length(); i++) {				
 				JSONObject parkingLocation = parkingLocations.getJSONObject(i);
+				String id = parkingLocation.getString(JSONKeys.ID);
 				String name = parkingLocation.getString(JSONKeys.NAME);
 				Double latitude = parkingLocation.getDouble(JSONKeys.LATITUDE);
 				Double longitude = parkingLocation
@@ -155,15 +159,25 @@ public class LocationUtils {
 				
 				// add marker to the map
 				if (null != googleMap) {
-					googleMap.addMarker(new MarkerOptions()
-							.position(new LatLng(latitude, longitude))
-							.title(name).snippet(address).draggable(true)
-
-					);
-
-				}
+					MarkerOptions markerOptions = new MarkerOptions();
+					markerOptions.position(new LatLng(latitude, longitude))
+					.title(name).snippet(address).draggable(false);
+					if (category != null
+							&& category.equals("PUBLIC")) {
+						markerOptions.icon(BitmapDescriptorFactory
+								.fromResource(R.drawable.ic_public_parking_marker));
+					} else if (category != null
+								&& category.equals("PAID")) {
+						markerOptions.icon(BitmapDescriptorFactory
+								.fromResource(R.drawable.ic_paid_parking_marker));
+					} else {
+						markerOptions.icon(BitmapDescriptorFactory
+								.fromResource(R.drawable.ic_unknown_parking_marker));
+					}
+					Marker m = googleMap.addMarker(markerOptions);	
+					markers.put(m, Integer.parseInt(id));
+				}				
 			}
-
 		} else {
 			Toast.makeText(activity, "Failed to fetch data from server!",
 					Toast.LENGTH_SHORT).show();
@@ -173,24 +187,7 @@ public class LocationUtils {
 				.getSystemService(Context.LAYOUT_INFLATER_SERVICE);
 
 		googleMap.setInfoWindowAdapter(new MarkerPopupCustom(inflater));
-
-		ViewGroup infoWindow = (ViewGroup) inflater.inflate(R.layout.popup,
-				null);
-
-		Button infoBtn = (Button) infoWindow.findViewById(R.id.button1);
-
-		infoBtn.setOnClickListener(new OnClickListener() {
-
-			@Override
-			public void onClick(View v) {
-				Intent myIntent = new Intent(activity,
-						DisplayDetailsActivity.class);
-				myIntent.putExtra("key", 1); // Optional parameters
-				activity.startActivity(myIntent);
-
-			}
-		});
-
+		
 	}
 
 	public static boolean isServicesEnabled(LocationManager locManager,

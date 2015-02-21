@@ -4,6 +4,7 @@ import java.io.InputStream;
 import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 
@@ -21,6 +22,8 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+
+
 //github.com/vijayaammineni/parkmycar.git
 import android.app.Activity;
 import android.app.AlarmManager;
@@ -29,6 +32,7 @@ import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.SearchManager;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
@@ -46,6 +50,7 @@ import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
+import android.view.Window;
 import android.view.ViewGroup.LayoutParams;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
@@ -54,8 +59,10 @@ import android.widget.Toast;
 
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
+import com.google.android.gms.maps.GoogleMap.OnInfoWindowClickListener;
 import com.google.android.gms.maps.MapFragment;
 import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.Marker;
 import com.parkmycar.json.JSONKeys;
 
 public class MainActivity extends ActionBarActivity {
@@ -68,6 +75,8 @@ public class MainActivity extends ActionBarActivity {
 	public static boolean isAddress = false;
 
 	public static String CURRENT_LOCATION = "My Location";
+	
+	public static HashMap<Marker, Integer> gMapMarkers = new HashMap<Marker, Integer>();
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -102,23 +111,23 @@ public class MainActivity extends ActionBarActivity {
 					LocationUtils.DEFAULT_ZOOM_LEVEL));
 		}
 
-		Button button = new Button(this);
-		button.setText("Click me");
-		addContentView(button, new LayoutParams(LayoutParams.WRAP_CONTENT,
-				LayoutParams.WRAP_CONTENT));
-		// attach a clik listener to click me button
-		button.setOnClickListener(new View.OnClickListener() {
-
-			@Override
-			public void onClick(View v) {
-				// TODO Auto-generated method stub
-				Intent detailsIntent = new Intent(MainActivity.this,
-						DisplayDetailsActivity.class);
-				detailsIntent.putExtra("id", 3);
-				startActivity(detailsIntent);
-
-			}
-		});
+//		Button button = new Button(this);
+//		button.setText("Click me");
+//		addContentView(button, new LayoutParams(LayoutParams.WRAP_CONTENT,
+//				LayoutParams.WRAP_CONTENT));
+//		// attach a clik listener to click me button
+//		button.setOnClickListener(new View.OnClickListener() {
+//
+//			@Override
+//			public void onClick(View v) {
+//				// TODO Auto-generated method stub
+//				Intent detailsIntent = new Intent(MainActivity.this,
+//						DisplayDetailsActivity.class);
+//				detailsIntent.putExtra("id", 3);
+//				startActivity(detailsIntent);
+//
+//			}
+//		});
 
 		if (Intent.ACTION_SEARCH.equals(intent.getAction())) {
 			address = intent.getStringExtra(SearchManager.QUERY);
@@ -131,15 +140,29 @@ public class MainActivity extends ActionBarActivity {
 					&& !address.isEmpty()) {
 				if (CURRENT_LOCATION.equalsIgnoreCase(address)) {
 					currentLocation = lu.getMyLocation(true);
-					getPL.execute(currentLocation.getLatitude(),
-							currentLocation.getLongitude());
+					if (currentLocation != null) {
+						getPL.execute(currentLocation.getLatitude(),
+								currentLocation.getLongitude());
+					}					
 				} else {
 					getPL.execute(address);
-					isAddress = true;
+					isAddress = true;						
 				}
-				
 			}
 		}
+		
+		//add marker info window click event for all the markers
+		googleMap.setOnInfoWindowClickListener(new OnInfoWindowClickListener() {						
+			@Override
+			public void onInfoWindowClick(Marker marker) {
+				Intent myIntent = new Intent(MainActivity.this,
+						DisplayDetailsActivity.class);
+				Integer parkingLocationId = gMapMarkers.get(marker);
+				myIntent.putExtra(com.parkmycar.Constants.PARKING_LOCATION_ID, parkingLocationId); 
+				startActivity(myIntent);
+			}
+		});
+		
 	}
 
 	@Override
@@ -444,9 +467,10 @@ public class MainActivity extends ActionBarActivity {
 				if (result != null) {
 					//clear the previous results
 					googleMap.clear();
+					gMapMarkers.clear();
 					//add the new results to the map
 					LocationUtils.addParkingLocations((Activity) context,
-							googleMap, new String(result.getResult()));
+							googleMap, new String(result.getResult()), gMapMarkers);
 					//move the google maps camera to the search address location
 					googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(
 							new LatLng(result.getLatitude(), result.getLongitude()), 

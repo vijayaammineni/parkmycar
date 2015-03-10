@@ -20,18 +20,18 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import android.app.Activity;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.DialogInterface;
+import android.content.IntentFilter;
 import android.content.DialogInterface.OnClickListener;
 import android.content.Intent;
-import android.location.Location;
+import android.content.SharedPreferences;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
-import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.view.View;
-import android.view.Window;
 import android.widget.Button;
 import android.widget.TableLayout;
 import android.widget.TableRow;
@@ -42,47 +42,136 @@ import android.widget.Toast;
 import com.parkmycar.json.JSONKeys;
 
 public class DisplayDetailsActivity extends Activity implements OnClickListener {
-	TableLayout table_layout;
-	TextView text_view;
+
+	TableLayout pricingTable;
+	TextView plName;
+	TextView addressView;
 	TextView availability_text;
-	
+	TextView publicParkingAvailableLabel;
+	TextView noPricingInfoAvailableLabel;
+	TextView upVote;
+	TextView downVote;
+	Button getDirectionsBtn;
+
+	private String pname;
 	private Double latitude;
 	private Double longitude;
+	
+	private SharedPreferences sharedPref;
+	private boolean isNavigatingToParkingLocation = false;
+	private AsyncTaskUtils atUtils;
+
+	// Broadcast receiver for receiving the location change events
+	private BroadcastReceiver broadcastReceiver = new BroadcastReceiver() {
+
+		@Override
+		public void onReceive(Context context, Intent intent) {
+			Bundle bundle = intent.getExtras();
+			if (LocationUtils.LOCATION_CHANGE_BROADCAST_ACTION.equals(intent
+					.getAction()) && bundle != null) {
+				Double latitude = bundle.getDouble(JSONKeys.LATITUDE);
+				Double longitude = bundle.getDouble(JSONKeys.LONGITUDE);
+				// if the user is navigating to a parking location then check
+				// to see the user reached the parking location, if so ask for
+				// feedback
+				if (isNavigatingToParkingLocation) {
+
+					Double destLocationLat = Double
+							.longBitsToDouble(sharedPref
+									.getLong(
+											getString(R.string.Destination_Location_Latitude),
+											0));
+					Double destLocationLng = Double
+							.longBitsToDouble(sharedPref
+									.getLong(
+											getString(R.string.Destination_Location_Longitude),
+											0));
+					Integer destPLId = sharedPref
+							.getInt(getString(R.string.Destination_Parking_Location_Id),
+									0);
+					String destPLName = sharedPref
+							.getString(
+									getString(R.string.Destination_Parking_Location_Name),
+									"Unknown");
+
+					Double distance = LocationUtils.distance(destLocationLat,
+							destLocationLng, latitude, longitude, 'M');
+					if (distance
+							.compareTo(LocationUtils.DEFAULT_PARKING_LOCATION_RADIUS) <= 0) {
+						LocationUtils.stopLocationChangeService(context);
+						atUtils.createParkedFeedbackPopup(destPLId, destPLName);
+						isNavigatingToParkingLocation = false;
+					}
+
+				}
+			}
+		}
+	};
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
 		super.onCreate(savedInstanceState);
 		Intent intent = getIntent();
-		int value = intent.getIntExtra(com.parkmycar.Constants.PARKING_LOCATION_ID, 0);
+		final int plId = intent.getIntExtra(
+				com.parkmycar.Constants.PARKING_LOCATION_ID, 0);
 		setContentView(R.layout.activity_details);
-		text_view = (TextView) findViewById(R.id.address);
-		availability_text = (TextView)findViewById(R.id.availabilityText);
-		table_layout = (TableLayout) findViewById(R.id.priceTableLayout);
-		Button btn = (Button) findViewById(R.id.button);
-		btn.setVisibility(View.VISIBLE);
-		final LocationUtils lu = new LocationUtils(this,getApplicationContext());
-		btn.setOnClickListener(new View.OnClickListener() {
-		public void onClick(View v) {			
-			Location location = lu.getMyLocation(true);
-			StringBuffer sb = new StringBuffer();
-			sb.append("http://maps.google.com/maps?saddr=")
-			  .append(location.getLatitude())
-			  .append(",")
-			  .append(location.getLongitude())
-			  .append("&daddr=")
-			  .append(latitude)
-			  .append(",")
-			  .append(longitude);			  
-			Intent intent = new Intent(
-					android.content.Intent.ACTION_VIEW,
-					Uri.parse(sb.toString()));
-			startActivity(intent);
-		}
+		plName = (TextView) findViewById(R.id.name);
+		addressView = (TextView) findViewById(R.id.address);
+		publicParkingAvailableLabel = (TextView) findViewById(R.id.public_parking_label);
+		noPricingInfoAvailableLabel = (TextView) findViewById(R.id.no_pricing_available_label);
+		upVote = (TextView) findViewById(R.id.icon_up_vote);
+		downVote = (TextView) findViewById(R.id.icon_down_vote);
+		availability_text = (TextView) findViewById(R.id.availabilityText);
+		pricingTable = (TableLayout) findViewById(R.id.priceTableLayout);
+		getDirectionsBtn = (Button) findViewById(R.id.button);
+		final LocationUtils lu = new LocationUtils(this,
+				getApplicationContext());
+		final Activity activity = this;
+		atUtils = new AsyncTaskUtils(this);
+		sharedPref = getPreferences(MODE_PRIVATE);
+		isNavigatingToParkingLocation = sharedPref.getBoolean(
+				getString(R.string.isNavigatingToParkingLocation), false);
+ 
+		getDirectionsBtn.setOnClickListener(new View.OnClickListener() {
+			public void onClick(View v) {
+				SharedPreferences.Editor editor = sharedPref.edit();
+				editor.putLong(
+						getString(R.string.Destination_Location_Latitude),
+						Double.doubleToRawLongBits(latitude));
+				editor.putLong(
+						getString(R.string.Destination_Location_Longitude),
+						Double.doubleToRawLongBits(longitude));
+				editor.putBoolean(
+						getString(R.string.isNavigatingToParkingLocation), true);
+				editor.putInt(
+						getString(R.string.Destination_Parking_Location_Id),
+						plId);
+				editor.putString(
+						getString(R.string.Destination_Parking_Location_Name),
+						pname);
+				editor.commit();
+				LocationUtils.startLocationChangeService(activity);
+				lu.navigateTo(activity, latitude, longitude, true);
+			}
 		});
 		GetParkingLocationDetails detailsAsyncTask = new GetParkingLocationDetails(
 				this);
-		detailsAsyncTask.execute(value);
+		detailsAsyncTask.execute(plId);
 	}
+	
+	@Override
+    protected void onResume() {
+        IntentFilter filter 
+        	= new IntentFilter(LocationUtils.LOCATION_CHANGE_BROADCAST_ACTION);
+        registerReceiver(broadcastReceiver, filter);
+        super.onResume();
+    }
+
+    @Override
+    protected void onPause() {
+        unregisterReceiver(broadcastReceiver);
+        super.onPause();
+    }
 
 	public void setFields(Context context, String result) throws JSONException {
 		JSONObject locations = new JSONObject(result);
@@ -91,87 +180,81 @@ public class DisplayDetailsActivity extends Activity implements OnClickListener 
 		if (parkingLocations != null) {
 			for (int i = 0; i < parkingLocations.length(); i++) {
 				JSONObject parkingLocation = parkingLocations.getJSONObject(i);
-				String name = parkingLocation.getString(JSONKeys.NAME);
+				pname = parkingLocation.getString(JSONKeys.NAME);
 				String address = parkingLocation.getString(JSONKeys.ADDRESS);
 				String city = parkingLocation.getString(JSONKeys.CITY);
 				Integer zipcode = parkingLocation.getInt(JSONKeys.ZIPCODE);
 				String state = parkingLocation.getString(JSONKeys.STATE);
 				String category = parkingLocation.getString(JSONKeys.CATEGORY);
 				latitude = parkingLocation.getDouble(JSONKeys.LATITUDE);
-				longitude = parkingLocation
-						.getDouble(JSONKeys.LONGITUDE);
+				longitude = parkingLocation.getDouble(JSONKeys.LONGITUDE);
 				Integer upVotes = parkingLocation.getInt(JSONKeys.UPVOTES);
 				Integer downVotes = parkingLocation.getInt(JSONKeys.DOWNVOTES);
 
 				String totalAddress = address + "\n" + city + "," + state
 						+ "\n" + zipcode;
+				plName.setText(pname);
+				addressView.setText(totalAddress);
 
-				text_view.setText(totalAddress);
+				upVote.setText(upVotes + "");
+				upVote.setVisibility(View.VISIBLE);
 
-				TextView ic = (TextView) findViewById(R.id.icon_up_vote);
-				ic.setText("" + upVotes);
-
-				TextView ic_down = (TextView) findViewById(R.id.icon_down_vote);
-				ic_down.setText("" + downVotes);
+				downVote.setText(downVotes + "");
+				downVote.setVisibility(View.VISIBLE);
 
 				JSONArray pricingList = parkingLocation
 						.getJSONArray(JSONKeys.PRICING_DETAILS_LIST);
 
-				// give an info message if pricing list is null
-				if (pricingList != null) {
-					buildTable(pricingList);
+				//
+				if (category.equals("PUBLIC")) {
+					publicParkingAvailableLabel.setVisibility(View.VISIBLE);
+				} else if (category.equals("PAID")) {
+					// give an info message if pricing list is null
+					if (pricingList == null || pricingList.length() == 0) {
+						noPricingInfoAvailableLabel.setVisibility(View.VISIBLE);
+					} else {
+						pricingTable.setVisibility(View.VISIBLE);
+						buildTable(pricingList);
+					}
 				}
 
-				else
-				{
-					Toast.makeText(context, "No pricing details exist!",
-							Toast.LENGTH_SHORT).show();
-				}
-				
+				getDirectionsBtn.setVisibility(View.VISIBLE);
+
 				JSONObject feedbackList = parkingLocation
 						.getJSONObject(JSONKeys.FEDDBACK_LIST);
 
 				// give an info message if feedback list is null
-				if ( feedbackList != null)
-				{
-				   StringBuilder sb = new StringBuilder("In last 30 Min \n");
-				   int availableVotes = feedbackList.getInt(JSONKeys.AVAILABLE_VOTES);
-				   int unavailableVotes = feedbackList.getInt(JSONKeys.NOTAVAILABLE_VOTES);
-				   int parkedNum = feedbackList.getInt(JSONKeys.PARKED_NUM);
-				   int checkedNum = feedbackList.getInt(JSONKeys.CHECKOUT_NUM);
-				   if(availableVotes==0&& unavailableVotes==0&&checkedNum==0&&parkedNum==0)
-				   {
-					   sb.append("No feedback details exist for this parking location!");
-				   }
-				   else
-				   {
-				    	if(availableVotes > 0)
-				    	{
-				    	   sb.append(availableVotes+" said parking available here \n");	
-				    	}
-				    	if(unavailableVotes > 0)
-				    	{
-				    		 sb.append(availableVotes+" said No parking available here\n");
-				    	}
-				    	if(parkedNum > 0)
-				    	{
-				    		sb.append(parkedNum+" parked here\n");
-				    	}
-				    	if(checkedNum > 0)
-				    	{
-				    		sb.append(parkedNum+" checked out from here");
-				    	}
+				if (feedbackList != null) {
+					StringBuilder sb = new StringBuilder(
+							"In last 30 Min.. \n\n");
+					int availableVotes = feedbackList
+							.getInt(JSONKeys.AVAILABLE_VOTES);
+					int unavailableVotes = feedbackList
+							.getInt(JSONKeys.NOTAVAILABLE_VOTES);
+					int parkedNum = feedbackList.getInt(JSONKeys.PARKED_NUM);
+					int checkedNum = feedbackList.getInt(JSONKeys.CHECKOUT_NUM);
+					if (availableVotes == 0 && unavailableVotes == 0
+							&& checkedNum == 0 && parkedNum == 0) {
+						sb.append("No parking activity was reported.\n");
+					} else {
+						if (availableVotes > 0) {
+							sb.append(availableVotes
+									+ " said parking available here \n");
+						}
+						if (unavailableVotes > 0) {
+							sb.append(availableVotes
+									+ " said No parking available here\n");
+						}
+						if (parkedNum > 0) {
+							sb.append(parkedNum + " parked here\n");
+						}
+						if (checkedNum > 0) {
+							sb.append(parkedNum + " checked out from here\n");
+						}
 
-				   }
-				    	availability_text.setText(sb.toString());
+					}
+					availability_text.setText(sb.toString());
 				}
-
-				else
-				{
-					Toast.makeText(context, "No feedback details exist for this parking location!",
-							Toast.LENGTH_SHORT).show();
-				}
-
 			}
 		}
 
@@ -212,8 +295,7 @@ public class DisplayDetailsActivity extends Activity implements OnClickListener 
 				row.addView(tv);
 
 			}
-
-			table_layout.addView(row);
+			pricingTable.addView(row);
 
 		}
 	}
@@ -253,8 +335,9 @@ public class DisplayDetailsActivity extends Activity implements OnClickListener 
 	 */
 	private class GetParkingLocationDetails extends
 			AsyncTask<Integer, Void, byte[]> {
-				
+
 		private Context context;
+
 		public GetParkingLocationDetails(Context context) {
 			this.context = context;
 

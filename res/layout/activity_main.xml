@@ -5,12 +5,75 @@
     android:layout_height="match_parent"
     tools:context="com.parkmycar.MainActivity"
     tools:ignore="MergeRootFrame" >
-    
-    <fragment
-          android:id="@+id/map"
-          android:layout_width="match_parent"
-          android:layout_height="match_parent"
-          android:name="com.google.android.gms.maps.MapFragment"/>
-    
-    </FrameLayout>
 
+    <fragment
+        android:id="@+id/map"
+        android:name="com.google.android.gms.maps.MapFragment"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+    <LinearLayout
+        android:id="@+id/parkingOption"
+        android:layout_width="wrap_content"
+        android:layout_height="match_parent"
+        android:layout_gravity="end"
+        android:orientation="horizontal">
+    
+    <Button
+            android:id="@+id/my_button_save"
+            android:layout_width="65dp"
+            android:layout_height="65dp"
+            android:layout_gravity="center_vertical"
+            android:contentDescription="@string/parking_option"
+            android:background="@drawable/park_options_btn_selector"
+            android:visibility="visible"
+			android:onClick="saveParkedLocation" />
+    
+    </LinearLayout>
+    <LinearLayout
+        android:id="@+id/afterSaveOptions"
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:orientation="horizontal" 
+        android:background="@android:color/darker_gray"        
+        android:alpha="0.95"
+        android:visibility="invisible">
+
+        <TextView
+            android:id="@+id/time_elapsed"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:layout_weight="0.45"
+            android:layout_gravity="center"
+            android:text="@string/default_elapsed_time"
+            android:gravity="center"
+            android:textColor="@android:color/holo_blue_dark"
+            android:textSize="30sp" />
+        
+        <TextView
+            android:id="@+id/distance"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:layout_weight="0.35"
+            android:layout_gravity="center"
+            android:gravity="center"
+            android:text="@string/default_distance"
+            android:textColor="@android:color/holo_blue_dark"
+            android:textSize="20sp" />        
+
+        <Button
+            android:id="@+id/directions"
+            android:layout_width="50dp"
+            android:layout_height="match_parent"
+            android:contentDescription="@string/walking_directions"
+            android:background="@drawable/navigate_btn_selector"
+            android:onClick="navigateTo" />
+
+        <Button
+            android:id="@+id/clear"
+            android:layout_width="50dp"
+            android:layout_height="match_parent"
+            android:contentDescription="@string/clear_parked_location"
+            android:background="@drawable/delete_parked_car_btn_selector"
+            android:onClick="clearParkedLocationDetails"/>
+    </LinearLayout>    
+    </FrameLayout>

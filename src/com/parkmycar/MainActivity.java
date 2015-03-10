@@ -1,12 +1,18 @@
 package com.parkmycar;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.net.URLEncoder;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.TimeZone;
+import java.util.Timer;
+import java.util.TimerTask;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.http.HttpResponse;
@@ -22,8 +28,6 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-
-
 //github.com/vijayaammineni/parkmycar.git
 import android.app.Activity;
 import android.app.AlarmManager;
@@ -32,72 +36,189 @@ import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.SearchManager;
-import android.content.ComponentName;
+import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.IntentFilter;
+import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.location.Location;
 import android.media.RingtoneManager;
-import android.net.ConnectivityManager;
-import android.net.NetworkInfo;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.os.Handler;
 import android.provider.SearchRecentSuggestions;
 import android.support.v7.app.ActionBarActivity;
+import android.util.Log;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
-import android.view.Window;
-import android.view.ViewGroup.LayoutParams;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.LinearLayout;
 import android.widget.SearchView;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
+import com.google.android.gms.maps.GoogleMap.OnCameraChangeListener;
 import com.google.android.gms.maps.GoogleMap.OnInfoWindowClickListener;
 import com.google.android.gms.maps.MapFragment;
+import com.google.android.gms.maps.model.CameraPosition;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.Marker;
 import com.parkmycar.json.JSONKeys;
 
 public class MainActivity extends ActionBarActivity {
 
+	static final String TAG = MainActivity.class.getSimpleName();
+	
+	static final String DISTANCE_TEXT = "%.2f miles";
+	
 	GoogleMap googleMap;
+	Marker carMarker;
 	Location currentLocation;
+
+	private Timer t;
+	private long TimeCounter = 0;
+	final Handler timeHandler = new Handler();
+	TextView timerText;
+	TextView distanceText;
+	
+	private static float currentZoom = LocationUtils.DEFAULT_ZOOM_LEVEL;
+	private static Float searchRadius = 3.0f;
+
 
 	private PendingIntent pendingIntent;
 
 	public static boolean isAddress = false;
 
 	public static String CURRENT_LOCATION = "My Location";
-	
+	private static Integer defaultMaxNumSearchResults = 1000;
+
+
 	public static HashMap<Marker, Integer> gMapMarkers = new HashMap<Marker, Integer>();
+	SharedPreferences sharedPref;
+	LinearLayout layout;
+	Button saveButton;
+	boolean isSaveRequest = false;
+	int pId;
+	String pName;
+
+	private LocationUtils lu;
+	
+	private AsyncTaskUtils atUtils;
+	
+	boolean isLocationStored = false;
+	
+	boolean isNavigatingToParkingLocation = false;
+
+	//Broadcast receiver for receiving the location change events
+	private BroadcastReceiver broadcastReceiver = new BroadcastReceiver() {
+
+		@Override
+		public void onReceive(Context context, Intent intent) {
+			Bundle bundle = intent.getExtras();
+			if (LocationUtils.LOCATION_CHANGE_BROADCAST_ACTION.equals(intent.getAction())
+					&& bundle != null) {
+				Double latitude = bundle.getDouble(JSONKeys.LATITUDE);
+				Double longitude = bundle.getDouble(JSONKeys.LONGITUDE);
+				//if the user has saved the parked location then we need to update the distance 
+				//from of the parked location from his current location
+				if (isLocationStored) {
+					Double carLocationLat = Double.longBitsToDouble(sharedPref.getLong(
+							getString(R.string.Stored_Location_Latitude), 0));
+					Double carLocationLng = Double.longBitsToDouble(sharedPref.getLong(
+							getString(R.string.Stored_Location_Longitude), 0));	
+					double dist = LocationUtils.distance(carLocationLat, 
+							carLocationLng, latitude, longitude, 'M');
+					distanceText.setText(String.format(DISTANCE_TEXT, dist));
+				}	
+				// if the user is navigating to a parking location then check 
+				// to see the user reached the parking location, if so ask for feedback
+				else if (isNavigatingToParkingLocation) {					
+					Double destLocationLat = Double.longBitsToDouble(sharedPref.getLong(
+							getString(R.string.Destination_Location_Latitude), 0));
+					Double destLocationLng = Double.longBitsToDouble(sharedPref.getLong(
+							getString(R.string.Destination_Location_Longitude), 0));	
+					Integer destPLId = sharedPref.getInt(
+							getString(R.string.Destination_Parking_Location_Id), 0);	
+					String destPLName = sharedPref.getString(
+							getString(R.string.Destination_Parking_Location_Name), "Unknown");	
+					
+					Double distance = LocationUtils.distance(destLocationLat, 
+							destLocationLng, latitude, longitude, 'M');
+					if(distance.compareTo(LocationUtils.DEFAULT_PARKING_LOCATION_RADIUS) <= 0)
+					{
+						LocationUtils.stopLocationChangeService(context);
+						atUtils.createParkedFeedbackPopup(destPLId, destPLName);
+					}					
+				}
+			}
+		}
+	};
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
+		
 		super.onCreate(savedInstanceState);
 		Intent intent = getIntent();
 		String address = null;
+		sharedPref = getPreferences(MODE_PRIVATE);
 
 		setContentView(R.layout.activity_main);
+
+		lu = new LocationUtils(this, getApplicationContext());
+		atUtils = new AsyncTaskUtils (this);
+		
+		// initializing GUI elements for displaying saved Location details
+		layout = (LinearLayout) findViewById(R.id.afterSaveOptions);
+		timerText = (TextView) findViewById(R.id.time_elapsed);
+		distanceText = (TextView) findViewById(R.id.distance);
+		saveButton = (Button) findViewById(R.id.my_button_save);
 
 		googleMap = ((MapFragment) getFragmentManager().findFragmentById(
 				R.id.map)).getMap();
 
 		if (googleMap == null) {
-			Toast.makeText(this, "Error in loading Google Maps.", Toast.LENGTH_LONG).show();
+			Toast.makeText(this, "Error in loading Google Maps.",
+					Toast.LENGTH_LONG).show();
 			finish();
 			return;
 		}
 
-		LocationUtils lu = new LocationUtils(this, getApplicationContext());
-        
+		googleMap.setMyLocationEnabled(true);
 		currentLocation = lu.getMyLocation(false);
+
+		// If last location is stored, need to show timer after application is
+		// launched.
+		isLocationStored = sharedPref.getBoolean(
+				getString(R.string.Is_Location_Stored), false);
+		
+		isNavigatingToParkingLocation = sharedPref.getBoolean(
+				getString(R.string.isNavigatingToParkingLocation), false);
+
+		Double carLocationLat = null;
+		Double carLocationLng = null;
+		if (isLocationStored) {
+			saveButton.setEnabled(false);
+			layout.setVisibility(View.VISIBLE);
+			long lastTimeStored = sharedPref.getLong(
+					getString(R.string.Stored_Location_TimeInMs), 0);
+			long timediff = System.currentTimeMillis() - lastTimeStored;
+			TimeCounter = timediff / 1000;
+			setTimer();
+			carLocationLat = Double.longBitsToDouble(sharedPref.getLong(
+					getString(R.string.Stored_Location_Latitude), 0));
+			carLocationLng = Double.longBitsToDouble(sharedPref.getLong(
+					getString(R.string.Stored_Location_Longitude), 0));
+			LocationUtils.startLocationChangeService(this);
+		}
+
 		if (currentLocation != null) {
 			googleMap.setMyLocationEnabled(true);
 			LatLng currentCoordinates = new LatLng(
@@ -105,30 +226,32 @@ public class MainActivity extends ActionBarActivity {
 					currentLocation.getLongitude());
 			googleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(
 					currentCoordinates, LocationUtils.DEFAULT_ZOOM_LEVEL));
-		} else {
+			if (isLocationStored) {
+				if (carMarker != null) {
+					carMarker.remove();
+				}
+				carMarker = lu.addCarMarker(googleMap, new LatLng(
+						carLocationLat, carLocationLng));
+			}
+		} else if (isLocationStored) {
 			googleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(
-					new LatLng(LocationUtils.DEFAULT_LATITUDE, LocationUtils.DEFAULT_LONGITUDE), 
-					LocationUtils.DEFAULT_ZOOM_LEVEL));
+					new LatLng(carLocationLat, carLocationLng),
+					currentZoom));
+			if (carMarker != null) {
+				carMarker.remove();
+			}
+			carMarker = lu.addCarMarker(googleMap, new LatLng(carLocationLat,
+					carLocationLng));
+		} else {
+			//googleMap.setMyLocationEnabled(true);
+			googleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(
+					new LatLng(LocationUtils.DEFAULT_LATITUDE,
+							LocationUtils.DEFAULT_LONGITUDE),
+							currentZoom));
 		}
 
-//		Button button = new Button(this);
-//		button.setText("Click me");
-//		addContentView(button, new LayoutParams(LayoutParams.WRAP_CONTENT,
-//				LayoutParams.WRAP_CONTENT));
-//		// attach a clik listener to click me button
-//		button.setOnClickListener(new View.OnClickListener() {
-//
-//			@Override
-//			public void onClick(View v) {
-//				// TODO Auto-generated method stub
-//				Intent detailsIntent = new Intent(MainActivity.this,
-//						DisplayDetailsActivity.class);
-//				detailsIntent.putExtra("id", 3);
-//				startActivity(detailsIntent);
-//
-//			}
-//		});
-
+		
+	
 		if (Intent.ACTION_SEARCH.equals(intent.getAction())) {
 			address = intent.getStringExtra(SearchManager.QUERY);
 			SearchRecentSuggestions suggestions = new SearchRecentSuggestions(
@@ -136,34 +259,71 @@ public class MainActivity extends ActionBarActivity {
 					SearchSuggestionProvider.MODE);
 			suggestions.saveRecentQuery(address, null);
 			GetParkingLocations getPL = new GetParkingLocations(this);
-			if (address != null 
-					&& !address.isEmpty()) {
+			if (address != null && !address.isEmpty()) {
 				if (CURRENT_LOCATION.equalsIgnoreCase(address)) {
 					currentLocation = lu.getMyLocation(true);
 					if (currentLocation != null) {
 						getPL.execute(currentLocation.getLatitude(),
 								currentLocation.getLongitude());
-					}					
+					}
+					isAddress = false;
 				} else {
 					getPL.execute(address);
-					isAddress = true;						
+					isAddress = true;
 				}
 			}
+		} else {
+			GetParkingLocations getPL = new GetParkingLocations(this);
+			if (currentLocation != null) {
+				getPL.execute(currentLocation.getLatitude(),
+						currentLocation.getLongitude());
+			} else {
+				getPL.execute(LocationUtils.DEFAULT_LATITUDE,
+						LocationUtils.DEFAULT_LONGITUDE);
+			}
 		}
-		
-		//add marker info window click event for all the markers
-		googleMap.setOnInfoWindowClickListener(new OnInfoWindowClickListener() {						
+
+		// add marker info window click event for all the markers
+		googleMap.setOnInfoWindowClickListener(new OnInfoWindowClickListener() {
 			@Override
 			public void onInfoWindowClick(Marker marker) {
 				Intent myIntent = new Intent(MainActivity.this,
 						DisplayDetailsActivity.class);
 				Integer parkingLocationId = gMapMarkers.get(marker);
-				myIntent.putExtra(com.parkmycar.Constants.PARKING_LOCATION_ID, parkingLocationId); 
-				startActivity(myIntent);
+				if (parkingLocationId != null) {
+					myIntent.putExtra(com.parkmycar.Constants.PARKING_LOCATION_ID,
+							parkingLocationId);
+					startActivity(myIntent);
+				}
 			}
 		});
 		
+		googleMap.setOnCameraChangeListener(new OnCameraChangeListener() {
+		    @Override
+		    public void onCameraChange(CameraPosition pos) {
+		        if (pos.zoom != currentZoom){
+		            currentZoom = pos.zoom;
+		            searchRadius = LocationUtils.getRadius(googleMap);
+		        }
+		    }
+		});
 	}
+	
+	
+
+	@Override
+    protected void onResume() {
+        IntentFilter filter 
+        	= new IntentFilter(LocationUtils.LOCATION_CHANGE_BROADCAST_ACTION);
+        registerReceiver(broadcastReceiver, filter);
+        super.onResume();
+    }
+
+    @Override
+    protected void onPause() {
+        unregisterReceiver(broadcastReceiver);
+        super.onPause();
+    }
 
 	@Override
 	public boolean onOptionsItemSelected(MenuItem item) {
@@ -177,6 +337,133 @@ public class MainActivity extends ActionBarActivity {
 		default:
 			return super.onOptionsItemSelected(item);
 		}
+	}
+
+	private void saveCurrentParkedLocationAsLastParked(
+			SharedPreferences.Editor editor) {
+		editor.putLong(getString(R.string.Last_Stored_Location_Longitude),
+				Double.doubleToRawLongBits(sharedPref.getLong(
+						getString(R.string.Stored_Location_Latitude), 0)));
+		editor.putLong(getString(R.string.Last_Stored_Location_Longitude),
+				Double.doubleToRawLongBits(sharedPref.getLong(
+						getString(R.string.Stored_Location_Longitude), 0)));
+		editor.putLong(getString(R.string.Last_Stored_Location_TimeInMs),
+				sharedPref.getLong(
+						getString(R.string.Stored_Location_TimeInMs), 0));
+	}
+
+	public void saveParkedLocation(View view) {
+
+		if (currentLocation == null) {
+			currentLocation = lu.getMyLocation(true);
+		} else {
+			carMarker = lu.addCarMarker(
+					googleMap,
+					new LatLng(currentLocation.getLatitude(), currentLocation
+							.getLongitude()));
+			TimeCounter = 0;
+			layout.setVisibility(View.VISIBLE);
+
+			SharedPreferences.Editor editor = sharedPref.edit();
+
+			saveCurrentParkedLocationAsLastParked(editor);
+
+			editor.putBoolean(getString(R.string.Is_Location_Stored), true);
+
+			editor.putLong(getString(R.string.Stored_Location_Longitude),
+					Double.doubleToRawLongBits(currentLocation.getLongitude()));
+			editor.putLong(getString(R.string.Stored_Location_Latitude),
+					Double.doubleToRawLongBits(currentLocation.getLatitude()));
+			editor.putLong(getString(R.string.Stored_Location_TimeInMs),
+					System.currentTimeMillis());
+			editor.commit();
+			setTimer();
+			saveButton.setEnabled(false);
+			//start the location change listener
+			LocationUtils.startLocationChangeService(this);
+			
+			isAddress = false;
+			isSaveRequest = true;
+			GetParkingLocations getPL = new GetParkingLocations(this);
+			getPL.execute(currentLocation.getLatitude(),
+						currentLocation.getLongitude());
+			
+			//move the google map focus to the parked location
+			googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(
+					new LatLng(currentLocation.getLatitude(), currentLocation
+							.getLongitude()),
+					LocationUtils.DEFAULT_ZOOM_LEVEL));			
+		}
+
+	}
+
+	public void navigateTo(View view) {
+		lu.navigateTo(this, Double.longBitsToDouble(sharedPref.getLong(
+				getString(R.string.Stored_Location_Latitude), 0)), Double
+				.longBitsToDouble(sharedPref.getLong(
+						getString(R.string.Stored_Location_Longitude), 0)),
+				false);
+	}
+
+	private void setTimer() {
+		t = new Timer();
+		t.scheduleAtFixedRate(new TimerTask() {
+
+			@Override
+			public void run() {
+				// TODO Auto-generated method stub
+				runOnUiThread(new Runnable() {
+					public void run() {
+						updateGUI();
+					}
+				});
+
+			}
+		}, 1000, 1000);
+	}
+
+	private void updateGUI() {
+		TimeCounter++;
+		// tv.setText(String.valueOf(i));
+		timeHandler.post(myRunnable);
+	}
+
+	final Runnable myRunnable = new Runnable() {
+		public void run() {
+			long millis = 1000 * TimeCounter;
+			TimeZone tz = TimeZone.getTimeZone("PST");
+			SimpleDateFormat df = new SimpleDateFormat("HH:mm:ss");
+			df.setTimeZone(tz);
+			String time = df.format(new Date(millis));
+			Log.d(TAG, "time in hh:mm:ss " + time);
+			timerText.setText(String.valueOf(time));
+		}
+	};
+
+	public void clearParkedLocationDetails(View view) throws IOException {
+		carMarker.remove();
+		carMarker = null;
+		TimeCounter = 0;
+		timerText.setText(R.string.default_elapsed_time);
+		distanceText.setText(String.format(DISTANCE_TEXT, 0.00));
+		SharedPreferences.Editor editor = sharedPref.edit();
+		saveCurrentParkedLocationAsLastParked(editor);
+		editor.putBoolean(getString(R.string.Is_Location_Stored), false);
+		int pId = sharedPref.getInt(getString(R.string.Last_Stored_Parking_Location_Id), 0);
+		editor.putInt(getString(R.string.Last_Stored_Parking_Location_Id),0);
+		editor.commit();
+		t.cancel();
+		saveButton.setEnabled(true);
+		layout.setVisibility(View.INVISIBLE);
+		LocationUtils.stopLocationChangeService(this);
+		AsyncTaskUtils atUtils = new AsyncTaskUtils(this);
+		
+		if(pId != 0)
+		{
+			atUtils.createCheckoutFeedbackPopup(pId);
+		}
+		stopNotificationAlarm();
+
 	}
 
 	// @author: Bhavya
@@ -216,7 +503,7 @@ public class MainActivity extends ActionBarActivity {
 								calendar.getTimeInMillis(), pendingIntent);
 
 						Toast.makeText(MainActivity.this,
-								"Reminder Set Successful!", Toast.LENGTH_SHORT)
+								"Reminder is Set!", Toast.LENGTH_SHORT)
 								.show();
 						dialog.dismiss();
 
@@ -282,10 +569,9 @@ public class MainActivity extends ActionBarActivity {
 		if (mNM != null) {
 			mNM.cancel(123456);
 			mNM.cancel(123457);
-		}
-		Toast.makeText(MainActivity.this, "Reminder deleted",
-				Toast.LENGTH_SHORT).show();
-
+//			Toast.makeText(MainActivity.this, "Reminder deleted",
+//					Toast.LENGTH_SHORT).show();
+		}		
 	}
 
 	@Override
@@ -318,31 +604,18 @@ public class MainActivity extends ActionBarActivity {
 
 		}
 
-		// check Internet conenction.
-		private void checkInternetConenction() {
-			ConnectivityManager check = (ConnectivityManager) this.context
-					.getSystemService(Context.CONNECTIVITY_SERVICE);
-			if (check != null) {
-				NetworkInfo[] info = check.getAllNetworkInfo();
-				if (info != null)
-					for (int i = 0; i < info.length; i++)
-						if (info[i].getState() == NetworkInfo.State.CONNECTED) {
-							Toast.makeText(context, "Internet is connected",
-									Toast.LENGTH_SHORT).show();
-						}
-
-			} else {
-				Toast.makeText(context, "not conencted to internet",
-						Toast.LENGTH_SHORT).show();
-			}
-		}
-
+	
 		protected void onPreExecute() {
-			checkInternetConenction();
+			//boolean internetStatus = lu.checkInternetConenction(this.context);
+			/*while(!internetStatus)
+			{
+				internetStatus = lu.checkInternetConenction(this.context);
+			}*/
 		}
 
 		@Override
-		protected FetchParkingLocationsResult<byte[]> doInBackground(Object... params) {
+		protected FetchParkingLocationsResult<byte[]> doInBackground(
+				Object... params) {
 			Double latitude = null;
 			Double longitude = null;
 			HttpPost httpPost = new HttpPost(
@@ -360,8 +633,7 @@ public class MainActivity extends ActionBarActivity {
 							+ "&sensor=false");
 					HttpResponse pageResp = httpClient.execute(new HttpGet(url
 							.toString()));
-					if (pageResp.getStatusLine().getStatusCode()
-							!= HttpStatus.SC_OK) {
+					if (pageResp.getStatusLine().getStatusCode() != HttpStatus.SC_OK) {
 						return new FetchParkingLocationsResult<byte[]>(
 								new InvalidAddressException(
 										"Failed to resolve this address. Google Maps API error."));
@@ -379,7 +651,7 @@ public class MainActivity extends ActionBarActivity {
 								new InvalidAddressException(
 										"Please specify a valid address."));
 					}
-					if (results != null && results.length() > 0){
+					if (results != null && results.length() > 0) {
 						for (int i = 0; i < results.length(); i++) {
 							JSONObject result = results.getJSONObject(i);
 							JSONObject geometry = result
@@ -413,6 +685,19 @@ public class MainActivity extends ActionBarActivity {
 						latitude.toString()));
 				nameValuePairs.add(new BasicNameValuePair(JSONKeys.LONGITUDE,
 						longitude.toString()));
+				String radius = searchRadius.toString();
+				String maxNumResults = defaultMaxNumSearchResults.toString();
+				if (isSaveRequest)
+				{
+					radius = "0.05";	
+					maxNumResults = "5";
+				}
+				
+				nameValuePairs.add(new BasicNameValuePair(JSONKeys.RADIUS,
+						radius));
+				nameValuePairs.add(new BasicNameValuePair(JSONKeys.MAX_NUM_RESULTS,
+						maxNumResults));
+				
 
 				// add data
 
@@ -424,7 +709,8 @@ public class MainActivity extends ActionBarActivity {
 						.getStatusCode()) {
 					InputStream in = response.getEntity().getContent();
 					bytes = IOUtils.toByteArray(in);
-					FetchParkingLocationsResult<byte[]> fplr = new FetchParkingLocationsResult<byte[]>(bytes);
+					FetchParkingLocationsResult<byte[]> fplr = new FetchParkingLocationsResult<byte[]>(
+							bytes);
 					fplr.setLatitude(latitude);
 					fplr.setLongitude(longitude);
 					return fplr;
@@ -435,7 +721,7 @@ public class MainActivity extends ActionBarActivity {
 			}
 
 			catch (Exception e) {
-				System.out.print(e.getMessage());
+				e.printStackTrace();
 				return new FetchParkingLocationsResult<byte[]>(
 						"Failed to fetch data from server!");
 			}
@@ -464,17 +750,36 @@ public class MainActivity extends ActionBarActivity {
 					 */
 					return;
 				}
+				else if(result != null 
+						&& isSaveRequest)
+				{
+					setCurrentParkingLocationID(new String(result.getResult()));
+					isSaveRequest= false;
+					//get the parking lot id from shared preferences below
+					if(pId != 0 
+							&& pName != null)
+					{
+						atUtils.createParkedFeedbackPopup(pId, pName);
+						atUtils.createAvailabilityFeedbackPopup(pId);						
+						SharedPreferences.Editor editor = sharedPref.edit();
+						editor.putInt(getString(R.string.Last_Stored_Parking_Location_Id),pId);
+						editor.commit();
+					}
+					return;
+				}
 				if (result != null) {
-					//clear the previous results
+					// clear the previous results
 					googleMap.clear();
 					gMapMarkers.clear();
-					//add the new results to the map
+					// add the new results to the map
 					LocationUtils.addParkingLocations((Activity) context,
-							googleMap, new String(result.getResult()), gMapMarkers);
-					//move the google maps camera to the search address location
+							googleMap, new String(result.getResult()),
+							gMapMarkers);
+					// move the google maps camera to the search address
+					// location
 					googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(
-							new LatLng(result.getLatitude(), result.getLongitude()), 
-							LocationUtils.DEFAULT_ZOOM_LEVEL));					
+							new LatLng(result.getLatitude(), result
+									.getLongitude()), currentZoom));
 				}
 
 			} catch (JSONException e) {
@@ -484,4 +789,23 @@ public class MainActivity extends ActionBarActivity {
 			}
 		}
 	}
+	
+	public void setCurrentParkingLocationID(String resultJson)throws JSONException
+	{
+		JSONObject locations = new JSONObject(resultJson);
+		JSONArray parkingLocations = locations
+				.getJSONArray(JSONKeys.PARKING_LOCATIONS);
+		if (parkingLocations != null)
+		{
+			if (parkingLocations.length() >= 1)
+			{
+				JSONObject parkingLocation = parkingLocations.getJSONObject(0);
+				pId = Integer.parseInt(parkingLocation.getString(JSONKeys.ID));
+				pName = parkingLocation.getString(JSONKeys.NAME);
+				
+			}
+		}
+		
+	}
+	
 }

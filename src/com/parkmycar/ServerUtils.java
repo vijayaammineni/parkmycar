@@ -10,6 +10,7 @@ public class ServerUtils {
 	private static String PROTOCOL = "http";
 	public static String PARKING_LOCATIONS_CPATH = "/ParkingLocations";
 	public static String PARKING_LOCATION_DETAILS_PATH = "/ParkingLocationDetails";
+	public static String USER_FEEDBACK_PATH = "/UserFeedback";
 	
 	public static URI getFullUrl (String contextPath) {
 		try {

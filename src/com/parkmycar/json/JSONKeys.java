@@ -8,6 +8,8 @@ public class JSONKeys {
 	public static final String ADDRESS = "address";
 	public static final String LATITUDE = "latitude";
 	public static final String LONGITUDE = "longitude";
+	public static final String RADIUS = "radius";
+	public static final String MAX_NUM_RESULTS = "maxNumResults";
 	public static final String LOCATION_ID = "id";
 	public static final String CITY = "city";
 	public static final String ZIPCODE = "zipcode";
@@ -15,6 +17,7 @@ public class JSONKeys {
 	public static final String CATEGORY = "category";
 	public static final String UPVOTES = "upVotes";
 	public static final String DOWNVOTES = "downVotes";
+	public static final String DISTANCE = "distance";
 	
 	public static final String PRICING_DETAILS_LIST = "pricingDetailsList";
 	public static final String DAY_PRICE = "dayPrice";
@@ -26,6 +29,12 @@ public class JSONKeys {
 	public static final String NOTAVAILABLE_VOTES = "unAvailableVotes";
 	public static final String CHECKOUT_NUM = "parkedNum";
 	public static final String PARKED_NUM = "checkedOutNum";
+	
+	public static final String USER_FEEDBACK = "UserFeedback";
+	public static final String  ANDROID_ID= "mcdid";
+	public static final String TIME_STAMP = "timetamp";
+	public static final String FEEDBACK_TYPE = "type";
+	public static final String PARKINGLOCATION_ID = "pId";
 	
 	public static final String RESULTS	= "results";
 	public static final String STATUS = "status";

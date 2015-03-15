@@ -5,6 +5,7 @@ import java.io.InputStream;
 import java.net.URLEncoder;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.HashMap;
@@ -43,6 +44,9 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.graphics.Color;
+import android.hardware.Sensor;
+import android.hardware.SensorEvent;
+import android.hardware.SensorEventListener;
 import android.location.Location;
 import android.media.RingtoneManager;
 import android.net.Uri;
@@ -72,13 +76,14 @@ import com.google.android.gms.maps.model.CameraPosition;
 import com.google.android.gms.maps.model.LatLng;
 import com.google.android.gms.maps.model.Marker;
 import com.parkmycar.json.JSONKeys;
+import com.parkmycar.json.UserFeedbackType;
 
-public class MainActivity extends ActionBarActivity {
+public class MainActivity extends ActionBarActivity implements SensorEventListener{
 
 	static final String TAG = MainActivity.class.getSimpleName();
 	
 	static final String DISTANCE_TEXT = "%.2f miles";
-	
+		
 	GoogleMap googleMap;
 	Marker carMarker;
 	Location currentLocation;
@@ -95,7 +100,7 @@ public class MainActivity extends ActionBarActivity {
 
 	private PendingIntent pendingIntent;
 
-	public static boolean isAddress = false;
+	//public static boolean isAddress = false;
 
 	public static String CURRENT_LOCATION = "My Location";
 	private static Integer defaultMaxNumSearchResults = 1000;
@@ -105,13 +110,13 @@ public class MainActivity extends ActionBarActivity {
 	SharedPreferences sharedPref;
 	LinearLayout layout;
 	Button saveButton;
-	boolean isSaveRequest = false;
+	
 	int pId;
 	String pName;
 
 	private LocationUtils lu;
 	
-	private AsyncTaskUtils atUtils;
+	private UserFeedbackUtils ufUtils;
 	
 	boolean isLocationStored = false;
 	
@@ -145,7 +150,7 @@ public class MainActivity extends ActionBarActivity {
 							getString(R.string.Destination_Location_Latitude), 0));
 					Double destLocationLng = Double.longBitsToDouble(sharedPref.getLong(
 							getString(R.string.Destination_Location_Longitude), 0));	
-					Integer destPLId = sharedPref.getInt(
+					final Integer destPLId = sharedPref.getInt(
 							getString(R.string.Destination_Parking_Location_Id), 0);	
 					String destPLName = sharedPref.getString(
 							getString(R.string.Destination_Parking_Location_Name), "Unknown");	
@@ -155,9 +160,30 @@ public class MainActivity extends ActionBarActivity {
 					if(distance.compareTo(LocationUtils.DEFAULT_PARKING_LOCATION_RADIUS) <= 0)
 					{
 						LocationUtils.stopLocationChangeService(context);
-						atUtils.createParkedFeedbackPopup(destPLId, destPLName);
+						ufUtils.showFeedbackPopup (destPLId, 
+			        		String.format(UserFeedbackUtils.PARKING_LOT_CAR_PARKED_FEEDBACK_STR, destPLName), UserFeedbackType.PARKED, null,
+			        		new DialogInterface.OnClickListener() {	
+								@Override
+								public void onClick(DialogInterface dialog, int which) {
+									ufUtils.update(UserFeedbackType.PARKED, destPLId);
+									dialog.cancel();
+									//we are asking for availability feedback here because if user hasn't responded to this then dont 
+									//bother user by asking about availability
+									ufUtils.createAvailabilityFeedbackPopup(pId);
+								}
+							}, null);
 					}					
 				}
+			}
+			else if (MotionSensorUpdatesService.WALKING.equals(intent.getAction())) {
+				//TBD: see if the user is inside a parking lot, if so record that the user has parked the car here
+				Log.d(TAG,  "User is walking!");
+				Toast.makeText(context,  "User is walking!", Toast.LENGTH_LONG).show();
+			}
+			else if (MotionSensorUpdatesService.DRIVING.equals(intent.getAction())) {
+				//TBD: see if the user is inside a parking lot, if so record he/she has checked out now
+				Log.d(TAG,  "User is driving!");
+				Toast.makeText(context, "User is driving!", Toast.LENGTH_LONG).show();
 			}
 		}
 	};
@@ -171,9 +197,9 @@ public class MainActivity extends ActionBarActivity {
 		sharedPref = getPreferences(MODE_PRIVATE);
 
 		setContentView(R.layout.activity_main);
-
+		
 		lu = new LocationUtils(this, getApplicationContext());
-		atUtils = new AsyncTaskUtils (this);
+		ufUtils = new UserFeedbackUtils (this);
 		
 		// initializing GUI elements for displaying saved Location details
 		layout = (LinearLayout) findViewById(R.id.afterSaveOptions);
@@ -264,22 +290,20 @@ public class MainActivity extends ActionBarActivity {
 					currentLocation = lu.getMyLocation(true);
 					if (currentLocation != null) {
 						getPL.execute(currentLocation.getLatitude(),
-								currentLocation.getLongitude());
+								currentLocation.getLongitude(), null, null, null);
 					}
-					isAddress = false;
 				} else {
-					getPL.execute(address);
-					isAddress = true;
+					getPL.execute(null, null, address, null, null);
 				}
 			}
 		} else {
 			GetParkingLocations getPL = new GetParkingLocations(this);
 			if (currentLocation != null) {
 				getPL.execute(currentLocation.getLatitude(),
-						currentLocation.getLongitude());
+						currentLocation.getLongitude(), null, null, null);
 			} else {
 				getPL.execute(LocationUtils.DEFAULT_LATITUDE,
-						LocationUtils.DEFAULT_LONGITUDE);
+						LocationUtils.DEFAULT_LONGITUDE, null, null, null);
 			}
 		}
 
@@ -307,6 +331,10 @@ public class MainActivity extends ActionBarActivity {
 		        }
 		    }
 		});
+		
+		//start the motion detection sensor updates service
+		MotionSensorUpdatesService.startMotionSensorUpdatesService(this);
+		
 	}
 	
 	
@@ -314,7 +342,10 @@ public class MainActivity extends ActionBarActivity {
 	@Override
     protected void onResume() {
         IntentFilter filter 
-        	= new IntentFilter(LocationUtils.LOCATION_CHANGE_BROADCAST_ACTION);
+        	= new IntentFilter();
+        filter.addAction(LocationUtils.LOCATION_CHANGE_BROADCAST_ACTION);
+        filter.addAction(MotionSensorUpdatesService.WALKING);
+        filter.addAction(MotionSensorUpdatesService.DRIVING);
         registerReceiver(broadcastReceiver, filter);
         super.onResume();
     }
@@ -324,6 +355,12 @@ public class MainActivity extends ActionBarActivity {
         unregisterReceiver(broadcastReceiver);
         super.onPause();
     }
+    
+    @Override
+    protected void onDestroy() {
+    	super.onDestroy();
+    	LocationUtils.stopLocationChangeService(this);
+    };
 
 	@Override
 	public boolean onOptionsItemSelected(MenuItem item) {
@@ -382,11 +419,9 @@ public class MainActivity extends ActionBarActivity {
 			//start the location change listener
 			LocationUtils.startLocationChangeService(this);
 			
-			isAddress = false;
-			isSaveRequest = true;
 			GetParkingLocations getPL = new GetParkingLocations(this);
 			getPL.execute(currentLocation.getLatitude(),
-						currentLocation.getLongitude());
+						currentLocation.getLongitude(), null, "0.05", "5");
 			
 			//move the google map focus to the parked location
 			googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(
@@ -449,18 +484,29 @@ public class MainActivity extends ActionBarActivity {
 		SharedPreferences.Editor editor = sharedPref.edit();
 		saveCurrentParkedLocationAsLastParked(editor);
 		editor.putBoolean(getString(R.string.Is_Location_Stored), false);
-		int pId = sharedPref.getInt(getString(R.string.Last_Stored_Parking_Location_Id), 0);
+		final int pId = sharedPref.getInt(getString(R.string.Last_Stored_Parking_Location_Id), 0);
 		editor.putInt(getString(R.string.Last_Stored_Parking_Location_Id),0);
 		editor.commit();
 		t.cancel();
 		saveButton.setEnabled(true);
 		layout.setVisibility(View.INVISIBLE);
 		LocationUtils.stopLocationChangeService(this);
-		AsyncTaskUtils atUtils = new AsyncTaskUtils(this);
+		ufUtils = new UserFeedbackUtils(this);
 		
 		if(pId != 0)
 		{
-			atUtils.createCheckoutFeedbackPopup(pId);
+			//TBD: may be see if the current location is available and is close by to the parking lot
+			//other wise don't ask for the feedback
+			ufUtils.showFeedbackPopup (pId, UserFeedbackUtils.PARKING_LOT_CHECKOUT_FEEDBACK_STR, UserFeedbackType.CHECKOUT, null, 
+					new DialogInterface.OnClickListener() {				
+				@Override
+				public void onClick(DialogInterface dialog, int which) {
+					ufUtils.update(UserFeedbackType.CHECKOUT, pId);
+					dialog.cancel();
+					//TBD: also ask about the available parkng lots
+				}
+			}, null);
+			
 		}
 		stopNotificationAlarm();
 
@@ -623,12 +669,16 @@ public class MainActivity extends ActionBarActivity {
 			List<NameValuePair> nameValuePairs = new ArrayList<NameValuePair>();
 			byte[] bytes = null;
 			try {
-
-				if (isAddress) {
+				if (params[0] != null
+						&& params[1] != null) {
+					latitude = (Double) params[0];
+					longitude = (Double) params[1];
+				}
+				else if (params[2] != null){
 					byte[] addressBytes = null;
 					StringBuilder url = new StringBuilder(
 							"http://maps.googleapis.com/maps/api/geocode/json?address=");
-					String addressObj = (String) params[0];
+					String addressObj = (String) params[2];
 					url.append(URLEncoder.encode(addressObj, "UTF-8")
 							+ "&sensor=false");
 					HttpResponse pageResp = httpClient.execute(new HttpGet(url
@@ -636,7 +686,7 @@ public class MainActivity extends ActionBarActivity {
 					if (pageResp.getStatusLine().getStatusCode() != HttpStatus.SC_OK) {
 						return new FetchParkingLocationsResult<byte[]>(
 								new InvalidAddressException(
-										"Failed to resolve this address. Google Maps API error."));
+										"Google Maps API error. Please try again later."));
 					}
 					System.out.print("Address: " + addressObj);
 					InputStream inAddress = pageResp.getEntity().getContent();
@@ -646,10 +696,17 @@ public class MainActivity extends ActionBarActivity {
 					JSONArray results = addresses
 							.getJSONArray(JSONKeys.RESULTS);
 					String status = addresses.getString(JSONKeys.STATUS);
-					if (!status.equalsIgnoreCase("OK") || results.length() > 1) {
-						return new FetchParkingLocationsResult<byte[]>(
+					if (!status.equalsIgnoreCase("OK")) {
+						if (status.equalsIgnoreCase("OVER_QUERY_LIMIT")) {
+							return new FetchParkingLocationsResult<byte[]>(
+									new InvalidAddressException(
+											"Google MAPS API error (over the limit usage)."));
+						} else {
+							return new FetchParkingLocationsResult<byte[]>(
 								new InvalidAddressException(
 										"Please specify a valid address."));
+						
+						}
 					}
 					if (results != null && results.length() > 0) {
 						for (int i = 0; i < results.length(); i++) {
@@ -674,23 +731,22 @@ public class MainActivity extends ActionBarActivity {
 										"Could not find this address. Please modify the address and try again."));
 					}
 
-				} else {
-					latitude = (Double) params[0];
-					longitude = (Double) params[1];
-					System.out.print("Latitude: " + latitude + ", Longitude: "
-							+ longitude);
 				}
 
 				nameValuePairs.add(new BasicNameValuePair(JSONKeys.LATITUDE,
 						latitude.toString()));
 				nameValuePairs.add(new BasicNameValuePair(JSONKeys.LONGITUDE,
 						longitude.toString()));
+				
 				String radius = searchRadius.toString();
 				String maxNumResults = defaultMaxNumSearchResults.toString();
-				if (isSaveRequest)
+				
+				if (params[3] != null)
 				{
-					radius = "0.05";	
-					maxNumResults = "5";
+					radius = (String) params[3];					
+				}
+				if (params[4] != null) {
+					maxNumResults = (String) params[4];
 				}
 				
 				nameValuePairs.add(new BasicNameValuePair(JSONKeys.RADIUS,
@@ -713,6 +769,11 @@ public class MainActivity extends ActionBarActivity {
 							bytes);
 					fplr.setLatitude(latitude);
 					fplr.setLongitude(longitude);
+					
+					if (params[3] != null
+							|| params[4] != null) {
+						fplr.setIsSaveParkingRequest(true);
+					}
 					return fplr;
 				} else {
 					return new FetchParkingLocationsResult<byte[]>(
@@ -736,31 +797,39 @@ public class MainActivity extends ActionBarActivity {
 				{
 					AlertDialog.Builder builder = new AlertDialog.Builder(
 							this.context);
-					builder.setIcon(android.R.drawable.ic_dialog_alert);
-					builder.setTitle("Failure");
+					builder.setIcon(R.drawable.ic_launcher);
+					builder.setTitle("Error");
 					builder.setMessage(result.getMessage());
 					builder.setPositiveButton("OK", null);
 					builder.show();
-
+					
 					/*
 					 * // Must call show() prior to fetching text view TextView
 					 * messageView = (TextView) dialog
 					 * .findViewById(android.R.id.message);
 					 * messageView.setGravity(Gravity.CENTER);
 					 */
+					
 					return;
 				}
 				else if(result != null 
-						&& isSaveRequest)
+						&& result.getIsSaveParkingRequest() != null
+							&& result.getIsSaveParkingRequest().booleanValue())
 				{
 					setCurrentParkingLocationID(new String(result.getResult()));
-					isSaveRequest= false;
 					//get the parking lot id from shared preferences below
 					if(pId != 0 
 							&& pName != null)
 					{
-						atUtils.createParkedFeedbackPopup(pId, pName);
-						atUtils.createAvailabilityFeedbackPopup(pId);						
+						ufUtils.showFeedbackPopup(pId, String.format(UserFeedbackUtils.PARKING_LOT_CAR_PARKED_FEEDBACK_STR, pName), 
+								UserFeedbackType.PARKED, null, new DialogInterface.OnClickListener() {							
+							@Override
+							public void onClick(DialogInterface dialog, int which) {
+								//we are asking for availability feedback here because if user hasn't responded to this then dont 
+								//bother user by asking about availability
+								ufUtils.createAvailabilityFeedbackPopup(pId);
+							}
+						}, null);						
 						SharedPreferences.Editor editor = sharedPref.edit();
 						editor.putInt(getString(R.string.Last_Stored_Parking_Location_Id),pId);
 						editor.commit();
@@ -805,6 +874,28 @@ public class MainActivity extends ActionBarActivity {
 				
 			}
 		}
+		
+	}
+
+
+
+	@Override
+	public void onSensorChanged(SensorEvent event) {
+		
+		StringBuffer sb = new StringBuffer();
+		sb.append("ACCELEROMETER");
+		sb.append(System.currentTimeMillis()/1000).append(": ");
+		sb.append(Arrays.toString(event.values));
+		sb.append("\n");
+		
+		//Log.d(TAG, sb.toString());
+	}
+
+
+
+	@Override
+	public void onAccuracyChanged(Sensor sensor, int accuracy) {
+		// TODO Auto-generated method stub
 		
 	}
 	

@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:layout_centerHorizontal="true"
-    android:orientation="vertical" >
-
+    android:layout_height="match_parent">
+    <LinearLayout 
+	    android:layout_width="match_parent"
+	    android:layout_height="wrap_content"
+	    android:orientation="vertical" >
     <TextView
         android:id="@+id/name"
         android:layout_width="wrap_content"
@@ -36,7 +37,7 @@
             android:ellipsize="end"
             android:gravity="center"
             android:singleLine="true"
-            android:visibility="invisible"
+            android:visibility="gone"
             android:textSize="12sp" />
 
         <TextView
@@ -47,22 +48,21 @@
             android:ellipsize="none"
             android:gravity="center"
             android:singleLine="true"
-            android:visibility="invisible"
+            android:visibility="gone"
             android:textSize="12sp" />
     </LinearLayout>
 
     <TextView
-        android:id="@+id/public_parking_label"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center"
-        android:layout_marginTop="25dp"
-        android:gravity="center"
-        android:text="@string/pps_label"
-        android:textColor="@android:color/holo_green_dark"
-        android:textSize="20sp"
-        android:visibility="invisible" />
-
+	        android:id="@+id/public_parking_label"
+	        android:layout_width="wrap_content"
+	        android:layout_height="wrap_content"
+	        android:layout_gravity="center"
+	        android:layout_marginTop="25dp"
+	        android:gravity="center"
+	        android:text="@string/pps_label"
+	        android:textColor="@android:color/holo_green_dark"
+	        android:textSize="20sp"
+	        android:visibility="gone" />
     <TextView
         android:id="@+id/no_pricing_available_label"
         android:layout_width="wrap_content"
@@ -73,46 +73,18 @@
         android:text="@string/npa_label"
         android:textColor="@android:color/holo_red_dark"
         android:textSize="20sp"
-        android:visibility="invisible" />
-
-    <TableLayout
-        android:id="@+id/header"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="@android:color/black" >
-    </TableLayout>
+        android:visibility="gone" />
 
     <TableLayout
         android:id="@+id/priceTableLayout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:padding="10dp"
+        android:orientation="horizontal"
+        android:padding="5dp"
         android:shrinkColumns="*"
         android:stretchColumns="*"
-        android:visibility="invisible" >
-
-        <TextView
-            android:background="@android:color/darker_gray"
-            android:gravity="start"
-            android:paddingEnd="5dp"
-            android:text="@string/colHeader1"
-            android:textColor="@android:color/black" />
-
-        <TextView
-            android:background="@android:color/darker_gray"
-            android:gravity="center_horizontal"
-            android:paddingEnd="2dp"
-            android:text="@string/colHeader2"
-            android:textColor="@android:color/black" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:background="@android:color/darker_gray"
-            android:gravity="center_horizontal"
-            android:text="@string/colHeader3"
-            android:textColor="@android:color/black" />
+        android:visibility="gone" >
+		
     </TableLayout>
 
     <TextView
@@ -120,6 +92,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center"
+        android:layout_marginTop="15dp"
         android:gravity="center"
         android:textColor="@android:color/holo_green_dark"
         android:textSize="15sp" />
@@ -131,6 +104,6 @@
         android:layout_gravity="center_horizontal"
         android:gravity="center_vertical|center_horizontal|start"
         android:text="@string/navigate_btn"
-        android:visibility="invisible" />
-
-</LinearLayout>
+        android:visibility="gone" />
+    </LinearLayout>
+</ScrollView>

@@ -7,6 +7,8 @@ public class FetchParkingLocationsResult<T> {
 
 	private Double latitude;
 	private Double longitude;
+	
+	private Boolean isSaveParkingRequest = false;
 
 	public T getResult() {
 		return result;
@@ -21,7 +23,13 @@ public class FetchParkingLocationsResult<T> {
 	}
 
 	public String getMessage() {
-		return message;
+		if (this.message != null) {
+			return this.message;
+		}
+		if (error != null) {
+			return error.getMessage();
+		}
+		return null;
 	}
 
 	public FetchParkingLocationsResult(T result) {
@@ -54,5 +62,14 @@ public class FetchParkingLocationsResult<T> {
 	public void setLongitude(Double longitude) {
 		this.longitude = longitude;
 	}
+
+	public Boolean getIsSaveParkingRequest() {
+		return isSaveParkingRequest;
+	}
+
+	public void setIsSaveParkingRequest(Boolean isSaveParkingRequest) {
+		this.isSaveParkingRequest = isSaveParkingRequest;
+	}
+	
 	
 }

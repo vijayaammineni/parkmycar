@@ -23,14 +23,16 @@ import android.app.Activity;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.DialogInterface;
-import android.content.IntentFilter;
 import android.content.DialogInterface.OnClickListener;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
+import android.graphics.Typeface;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
 import android.widget.TableLayout;
@@ -40,6 +42,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.parkmycar.json.JSONKeys;
+import com.parkmycar.json.UserFeedbackType;
 
 public class DisplayDetailsActivity extends Activity implements OnClickListener {
 
@@ -59,7 +62,7 @@ public class DisplayDetailsActivity extends Activity implements OnClickListener 
 	
 	private SharedPreferences sharedPref;
 	private boolean isNavigatingToParkingLocation = false;
-	private AsyncTaskUtils atUtils;
+	private UserFeedbackUtils ufUtils;
 
 	// Broadcast receiver for receiving the location change events
 	private BroadcastReceiver broadcastReceiver = new BroadcastReceiver() {
@@ -86,7 +89,7 @@ public class DisplayDetailsActivity extends Activity implements OnClickListener 
 									.getLong(
 											getString(R.string.Destination_Location_Longitude),
 											0));
-					Integer destPLId = sharedPref
+					final Integer destPLId = sharedPref
 							.getInt(getString(R.string.Destination_Parking_Location_Id),
 									0);
 					String destPLName = sharedPref
@@ -99,7 +102,15 @@ public class DisplayDetailsActivity extends Activity implements OnClickListener 
 					if (distance
 							.compareTo(LocationUtils.DEFAULT_PARKING_LOCATION_RADIUS) <= 0) {
 						LocationUtils.stopLocationChangeService(context);
-						atUtils.createParkedFeedbackPopup(destPLId, destPLName);
+						ufUtils.showFeedbackPopup(destPLId, String.format(UserFeedbackUtils.PARKING_LOT_CAR_PARKED_FEEDBACK_STR, destPLName), 
+								UserFeedbackType.PARKED, null, new DialogInterface.OnClickListener() {							
+							@Override
+							public void onClick(DialogInterface dialog, int which) {
+								//we are asking for availability feedback here because if user hasn't responded to this then dont 
+								//bother user by asking about availability
+								ufUtils.createAvailabilityFeedbackPopup(destPLId);
+							}
+						}, null);
 						isNavigatingToParkingLocation = false;
 					}
 
@@ -127,7 +138,7 @@ public class DisplayDetailsActivity extends Activity implements OnClickListener 
 		final LocationUtils lu = new LocationUtils(this,
 				getApplicationContext());
 		final Activity activity = this;
-		atUtils = new AsyncTaskUtils(this);
+		ufUtils = new UserFeedbackUtils(this);
 		sharedPref = getPreferences(MODE_PRIVATE);
 		isNavigatingToParkingLocation = sharedPref.getBoolean(
 				getString(R.string.isNavigatingToParkingLocation), false);
@@ -267,6 +278,40 @@ public class DisplayDetailsActivity extends Activity implements OnClickListener 
 
 	private void buildTable(JSONArray pricingArray) throws JSONException {
 
+		TableRow header = new TableRow(this);
+		header.setLayoutParams(new LayoutParams(LayoutParams.MATCH_PARENT,
+				LayoutParams.WRAP_CONTENT));
+		TextView h1 = new TextView(this);
+		h1.setLayoutParams(new LayoutParams(LayoutParams.WRAP_CONTENT,
+				LayoutParams.WRAP_CONTENT));
+		h1.setBackgroundResource(R.drawable.header_cell);
+		h1.setPadding(5, 5, 5, 5);
+		h1.setText("DAY");
+		h1.setGravity(Gravity.CENTER_HORIZONTAL);
+		h1.setTypeface(null, Typeface.BOLD);
+		TextView h2 = new TextView(this);
+		h2.setLayoutParams(new LayoutParams(LayoutParams.WRAP_CONTENT,
+				LayoutParams.WRAP_CONTENT));
+		h2.setBackgroundResource(R.drawable.header_cell);
+		h2.setPadding(5, 5, 5, 5);
+		h2.setText("Per Hour");
+		h2.setGravity(Gravity.CENTER_HORIZONTAL);
+		h2.setTypeface(null, Typeface.BOLD);
+		TextView h3 = new TextView(this);
+		h3.setLayoutParams(new LayoutParams(LayoutParams.WRAP_CONTENT,
+				LayoutParams.WRAP_CONTENT));
+		h3.setBackgroundResource(R.drawable.header_cell);
+		h3.setPadding(5, 5, 5, 5);
+		h3.setText("Per Day");
+		h3.setGravity(Gravity.CENTER_HORIZONTAL);
+		h3.setTypeface(null, Typeface.BOLD);
+
+		header.addView(h1);
+		header.addView(h2);
+		header.addView(h3);
+		
+		pricingTable.addView(header);
+		
 		// outer for loop
 		for (int i = 0; i < pricingArray.length(); i++) {
 

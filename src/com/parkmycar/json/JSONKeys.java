@@ -11,10 +11,12 @@ public class JSONKeys {
 	public static final String RADIUS = "radius";
 	public static final String MAX_NUM_RESULTS = "maxNumResults";
 	public static final String LOCATION_ID = "id";
+	public static final String MCD_ID = "mcdId";
 	public static final String CITY = "city";
 	public static final String ZIPCODE = "zipcode";
 	public static final String STATE = "state";
 	public static final String CATEGORY = "category";
+	public static final String VOTE_TYPE = "votedType";
 	public static final String UPVOTES = "upVotes";
 	public static final String DOWNVOTES = "downVotes";
 	public static final String DISTANCE = "distance";

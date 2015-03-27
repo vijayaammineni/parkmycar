@@ -132,17 +132,17 @@ public class LocationUtils {
 	}
 
 	public Marker addCarMarker(GoogleMap googleMap, LatLng latlng) {
-
+		Marker marker = null;
 		if (null != googleMap) {
-			Marker marker = googleMap.addMarker(new MarkerOptions()
+			marker = googleMap.addMarker(new MarkerOptions()
 					.position(latlng)
 					.title("You Parked Here")
 					.draggable(false)
 					.icon(BitmapDescriptorFactory
 							.fromResource(R.drawable.ic_parked_car)));
-			return marker;
+			
 		}
-		return null;
+		return marker;
 	}
 
 	public static void addParkingLocations(final Activity activity,

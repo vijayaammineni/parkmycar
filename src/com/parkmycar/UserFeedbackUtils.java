@@ -76,7 +76,7 @@ public class UserFeedbackUtils {
 				new DialogInterface.OnClickListener() {
 				public void onClick(DialogInterface dialog, int id) {
 					if (yesUfType != null) {
-						update(yesUfType, parkinglID);
+						update(yesUfType, parkinglID, false);
 					} else {
 						Toast.makeText(context, THANK_YOU_MSG,
 							Toast.LENGTH_SHORT).show();
@@ -92,7 +92,7 @@ public class UserFeedbackUtils {
 			builder1.setNegativeButton("No", new DialogInterface.OnClickListener() {
 				public void onClick(DialogInterface dialog, int id) {
 					if (noUfType != null) {
-						update(noUfType, parkinglID);
+						update(noUfType, parkinglID, false);
 					} else {
 						Toast.makeText(context, THANK_YOU_MSG,
 							Toast.LENGTH_SHORT).show();
@@ -109,7 +109,7 @@ public class UserFeedbackUtils {
 		timer.schedule(new TimerTask() {			
 			@Override
 			public void run() {
-				alertDialog.show();
+				//alertDialog.show();
 				mHandler.sendEmptyMessageDelayed(USER_FEEDBACK_POPUP, USER_FEEDBACK_POPUP_TIMEOUT);
 			}
 		}, new Date (System.currentTimeMillis() + (2 * 1000)));     
@@ -137,13 +137,13 @@ public class UserFeedbackUtils {
 		showFeedbackPopup(plId, PARKING_AVAILABLE_FEEDBACK_STR, null, null,
 				new DialogInterface.OnClickListener() {
 					public void onClick(DialogInterface dialog, int id) {				
-						update(UserFeedbackType.AVAILABLE, plId);
+						update(UserFeedbackType.AVAILABLE, plId, false);
 						dialog.cancel();
 					}
 				}, 
 				new DialogInterface.OnClickListener() {
 					public void onClick(DialogInterface dialog, int id) {				
-						update(UserFeedbackType.NOTAVAILABLE, plId);
+						update(UserFeedbackType.NOTAVAILABLE, plId, false);
 						dialog.cancel();
 					}
 		});
@@ -155,9 +155,9 @@ public class UserFeedbackUtils {
         		yesListener, null);
 	}
 
-	public void update(UserFeedbackType ufType, int plID) {
+	public void update(UserFeedbackType ufType, int plID, boolean silent) {
 		UpdateUserFeedbackInDB updateTask = new UpdateUserFeedbackInDB();
-		updateTask.execute(ufType, plID);
+		updateTask.execute(ufType, plID, silent);
 	}
 
 	private class UpdateUserFeedbackInDB extends
@@ -170,8 +170,12 @@ public class UserFeedbackUtils {
 
 			HttpPost httpPost = new HttpPost(
 					ServerUtils.getFullUrl(ServerUtils.USER_FEEDBACK_PATH));
+			Boolean silent = false;
 			try {
-
+				if (params.length > 2
+						&& params [2] != null) {
+					silent = (Boolean) params [2];
+				}
 				JSONObject jObj = new JSONObject();
 				jObj.put(JSONKeys.ANDROID_ID, androidId);
 				jObj.put(JSONKeys.PARKINGLOCATION_ID, params[1]);
@@ -182,8 +186,11 @@ public class UserFeedbackUtils {
 				httpPost.setEntity(new StringEntity(jObj.toString()));
 				// Execute HTTP Post Request
 				HttpResponse response = httpClient.execute(httpPost);
-
-				return response.getStatusLine().getStatusCode();
+				if (silent) {
+					return -1;
+				} else {
+					return response.getStatusLine().getStatusCode();
+				}				
 			} catch (ClientProtocolException e) {
 				e.printStackTrace();
 			} catch (JSONException e) {
@@ -191,11 +198,18 @@ public class UserFeedbackUtils {
 			} catch (IOException e) {
 				e.printStackTrace();
 			}
-			return 0;
+			if (silent) {
+				return -1;
+			} else {
+				return 0;
+			}
 		}
 
 		@Override
 		protected void onPostExecute(Integer statusCode) {
+			if (statusCode == -1) {
+				return;
+			}
 			try {
 				if (statusCode != null 
 						&& statusCode == HttpStatus.SC_OK) {

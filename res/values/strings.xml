@@ -19,6 +19,8 @@
     <string name="Destination_Parking_Location_Id">DestinationParkingLocationId</string>
     <string name="Destination_Parking_Location_Name">DestinationParkingLocationName</string>
     <string name="isNavigatingToParkingLocation">isNavigatingToParkingLocation</string>
+    <string name="reachedDestination">reachedDestination</string>
+    <string name="lastMotionType">lastMotionType</string>    
     <string name="Is_Location_Stored">isStored</string>
     <string name="start_reminder">Start Reminder</string>
     <string name="stop_reminder">Stop Reminder</string>
@@ -35,5 +37,7 @@
      <string name="clear_parked_location">Clear the parked location.</string>
      <string name="default_elapsed_time">00:00:00</string>
      <string name="default_distance">0.00 miles</string>
+     <string name="content_desc_upvote">UpVote</string>
+     <string name="content_desc_downvote">downVote</string>
      
 </resources>

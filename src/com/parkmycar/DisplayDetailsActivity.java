@@ -3,7 +3,10 @@ package com.parkmycar;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
+import java.util.Timer;
+import java.util.TimerTask;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.http.HttpResponse;
@@ -32,6 +35,7 @@ import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
@@ -45,6 +49,8 @@ import com.parkmycar.json.JSONKeys;
 import com.parkmycar.json.UserFeedbackType;
 
 public class DisplayDetailsActivity extends Activity implements OnClickListener {
+	
+	private final String TAG = DisplayDetailsActivity.class.getSimpleName();
 
 	TableLayout pricingTable;
 	TextView plName;
@@ -52,23 +58,32 @@ public class DisplayDetailsActivity extends Activity implements OnClickListener 
 	TextView availability_text;
 	TextView publicParkingAvailableLabel;
 	TextView noPricingInfoAvailableLabel;
-	TextView upVote;
-	TextView downVote;
+	Button upVote;
+	Button downVote;
+	TextView upVoteCount;
+	TextView downVoteCount;
 	Button getDirectionsBtn;
+	String androidId;
+	String voteType = null;
 
 	private String pname;
 	private Double latitude;
 	private Double longitude;
+	private Integer parkingLocationId;
 	
 	private SharedPreferences sharedPref;
 	private boolean isNavigatingToParkingLocation = false;
 	private UserFeedbackUtils ufUtils;
+	
+	private TimerTask askUserFeedbackTask;
+	private Timer timer = new Timer();
+
 
 	// Broadcast receiver for receiving the location change events
 	private BroadcastReceiver broadcastReceiver = new BroadcastReceiver() {
 
 		@Override
-		public void onReceive(Context context, Intent intent) {
+		public void onReceive(final Context context, Intent intent) {
 			Bundle bundle = intent.getExtras();
 			if (LocationUtils.LOCATION_CHANGE_BROADCAST_ACTION.equals(intent
 					.getAction()) && bundle != null) {
@@ -92,7 +107,7 @@ public class DisplayDetailsActivity extends Activity implements OnClickListener 
 					final Integer destPLId = sharedPref
 							.getInt(getString(R.string.Destination_Parking_Location_Id),
 									0);
-					String destPLName = sharedPref
+					final String destPLName = sharedPref
 							.getString(
 									getString(R.string.Destination_Parking_Location_Name),
 									"Unknown");
@@ -101,23 +116,100 @@ public class DisplayDetailsActivity extends Activity implements OnClickListener 
 							destLocationLng, latitude, longitude, 'M');
 					if (distance
 							.compareTo(LocationUtils.DEFAULT_PARKING_LOCATION_RADIUS) <= 0) {
-						LocationUtils.stopLocationChangeService(context);
-						ufUtils.showFeedbackPopup(destPLId, String.format(UserFeedbackUtils.PARKING_LOT_CAR_PARKED_FEEDBACK_STR, destPLName), 
-								UserFeedbackType.PARKED, null, new DialogInterface.OnClickListener() {							
-							@Override
-							public void onClick(DialogInterface dialog, int which) {
-								//we are asking for availability feedback here because if user hasn't responded to this then dont 
-								//bother user by asking about availability
-								ufUtils.createAvailabilityFeedbackPopup(destPLId);
-							}
-						}, null);
-						isNavigatingToParkingLocation = false;
+						//mark that the user has reached the location
+						SharedPreferences.Editor editor = sharedPref.edit();
+						editor.putBoolean(
+								getString(R.string.reachedDestination), true);
+						editor.commit();
+						if (askUserFeedbackTask == null) {
+							askUserFeedbackTask = new TimerTask() {							
+								@Override
+								public void run() {
+									LocationUtils.stopLocationChangeService(context);						
+									ufUtils.showFeedbackPopup (destPLId, 
+						        		String.format(UserFeedbackUtils.PARKING_LOT_CAR_PARKED_FEEDBACK_STR, destPLName), 
+						        		UserFeedbackType.PARKED, null,
+						        		new DialogInterface.OnClickListener() {	
+											@Override
+											public void onClick(DialogInterface dialog, int which) {
+												ufUtils.update(UserFeedbackType.PARKED, destPLId, false);
+												dialog.cancel();
+												//we are asking for availability feedback here because if user hasn't responded to this then dont 
+												//bother user by asking about availability
+												ufUtils.createAvailabilityFeedbackPopup(destPLId);
+											}
+										}, null);
+								}
+							};
+							timer.schedule(askUserFeedbackTask, new Date(System.currentTimeMillis() + (5 * 60 * 1000)));
+						}
 					}
 
 				}
 			}
+			else if (MotionSensorUpdatesService.WALKING.equals(intent.getAction())) {
+				//TBD: see if the user is inside a parking lot, if so record that the user has parked the car here
+				Log.d(TAG,  "User is walking!");
+				final Integer destPLId = sharedPref.getInt(
+						getString(R.string.Destination_Parking_Location_Id), 0);	
+				final String destPLName = sharedPref.getString(
+						getString(R.string.Destination_Parking_Location_Name), "Unknown");	
+				
+				if (isNavigatingToParkingLocation
+						&& destPLId != null
+						&& destPLName != null && !destPLName.equals("Unknown")) {
+					String lastMotionType = sharedPref.getString(
+							getString(R.string.lastMotionType), null);
+					Boolean reachedLocation = sharedPref.getBoolean(
+							getString(R.string.reachedDestination), false);
+					if (reachedLocation.booleanValue() 
+							&& lastMotionType != null
+								&& lastMotionType.equals(MotionSensorUpdatesService.DRIVING)) {
+						//we have found that user was last driving and now walking after parking the vehicle
+						timer.cancel();
+						ufUtils.update(UserFeedbackType.PARKED, destPLId, true);
+						clearAllNavigationParams();
+						MotionSensorUpdatesService.stopMotionSensorUpdatesService(context);
+					}
+				}
+				//Toast.makeText(context,  "User is walking!", Toast.LENGTH_LONG).show();
+			}
+			else if (MotionSensorUpdatesService.DRIVING.equals(intent.getAction())) {
+				Log.d(TAG,  "User is driving!");
+				if (isNavigatingToParkingLocation) {
+					String lastMotionType = sharedPref.getString(
+							getString(R.string.lastMotionType), null);
+					Boolean reachedLocation = sharedPref.getBoolean(
+							getString(R.string.reachedDestination), false);
+					if (lastMotionType == null
+							&& !reachedLocation.booleanValue()) {
+						//we now store that the user started driving
+						SharedPreferences.Editor editor = sharedPref.edit();
+						editor.putString(
+								getString(R.string.lastMotionType), MotionSensorUpdatesService.DRIVING);
+						editor.commit();
+					}
+				}
+				//Toast.makeText(context, "User is driving!", Toast.LENGTH_LONG).show();
+			}
 		}
 	};
+	
+	private void clearAllNavigationParams() {
+		SharedPreferences.Editor editor = sharedPref.edit();
+		editor.putLong(
+				getString(R.string.Destination_Location_Latitude), 0);
+		editor.putLong(
+				getString(R.string.Destination_Location_Longitude), 0);
+		editor.putBoolean(
+				getString(R.string.isNavigatingToParkingLocation), false);
+		editor.putLong("Time_Navigation_Started", 0);
+		editor.putInt(
+				getString(R.string.Destination_Parking_Location_Id), 0);
+		editor.putString(
+				getString(R.string.Destination_Parking_Location_Name), null);
+		editor.commit();		
+	}
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -125,13 +217,16 @@ public class DisplayDetailsActivity extends Activity implements OnClickListener 
 		Intent intent = getIntent();
 		final int plId = intent.getIntExtra(
 				com.parkmycar.Constants.PARKING_LOCATION_ID, 0);
+		parkingLocationId = plId;
 		setContentView(R.layout.activity_details);
 		plName = (TextView) findViewById(R.id.name);
 		addressView = (TextView) findViewById(R.id.address);
 		publicParkingAvailableLabel = (TextView) findViewById(R.id.public_parking_label);
 		noPricingInfoAvailableLabel = (TextView) findViewById(R.id.no_pricing_available_label);
-		upVote = (TextView) findViewById(R.id.icon_up_vote);
-		downVote = (TextView) findViewById(R.id.icon_down_vote);
+		upVote = (Button) findViewById(R.id.icon_up_vote);
+		downVote = (Button) findViewById(R.id.icon_down_vote);
+		upVoteCount = (TextView) findViewById(R.id.up_votes);
+		downVoteCount = (TextView) findViewById(R.id.down_votes);
 		availability_text = (TextView) findViewById(R.id.availabilityText);
 		pricingTable = (TableLayout) findViewById(R.id.priceTableLayout);
 		getDirectionsBtn = (Button) findViewById(R.id.button);
@@ -142,6 +237,24 @@ public class DisplayDetailsActivity extends Activity implements OnClickListener 
 		sharedPref = getPreferences(MODE_PRIVATE);
 		isNavigatingToParkingLocation = sharedPref.getBoolean(
 				getString(R.string.isNavigatingToParkingLocation), false);
+		Long timeNavigationStarted = sharedPref.getLong(
+				"Time_Navigation_Started", 0);
+		Long currentTime = System.currentTimeMillis();
+		if (currentTime == 0 || (currentTime - timeNavigationStarted) > (30 * 60 * 1000)) {
+			isNavigatingToParkingLocation = false;
+			SharedPreferences.Editor editor = sharedPref.edit();
+			editor.putBoolean(
+					getString(R.string.isNavigatingToParkingLocation), false);
+			editor.putString(
+					getString(R.string.lastMotionType), null);
+			editor.putLong("Time_Navigation_Started", 0L);
+			MotionSensorUpdatesService.startMotionSensorUpdatesService(activity);
+			editor.commit();
+			
+		}
+		androidId = android.provider.Settings.Secure.getString(this.getContentResolver(),
+				android.provider.Settings.Secure.ANDROID_ID);
+		
  
 		getDirectionsBtn.setOnClickListener(new View.OnClickListener() {
 			public void onClick(View v) {
@@ -154,6 +267,7 @@ public class DisplayDetailsActivity extends Activity implements OnClickListener 
 						Double.doubleToRawLongBits(longitude));
 				editor.putBoolean(
 						getString(R.string.isNavigatingToParkingLocation), true);
+				editor.putLong("Time_Navigation_Started", System.currentTimeMillis());
 				editor.putInt(
 						getString(R.string.Destination_Parking_Location_Id),
 						plId);
@@ -162,6 +276,8 @@ public class DisplayDetailsActivity extends Activity implements OnClickListener 
 						pname);
 				editor.commit();
 				LocationUtils.startLocationChangeService(activity);
+				//start the motion detection sensor updates service
+				MotionSensorUpdatesService.startMotionSensorUpdatesService(activity);
 				lu.navigateTo(activity, latitude, longitude, true);
 			}
 		});
@@ -201,18 +317,39 @@ public class DisplayDetailsActivity extends Activity implements OnClickListener 
 				longitude = parkingLocation.getDouble(JSONKeys.LONGITUDE);
 				Integer upVotes = parkingLocation.getInt(JSONKeys.UPVOTES);
 				Integer downVotes = parkingLocation.getInt(JSONKeys.DOWNVOTES);
+				String voteType = null;
+				if(parkingLocation.has(JSONKeys.VOTE_TYPE))
+				{
+				   voteType = parkingLocation.getString(JSONKeys.VOTE_TYPE);
+				}
 
 				String totalAddress = address + "\n" + city + "," + state
 						+ "\n" + zipcode;
 				plName.setText(pname);
 				addressView.setText(totalAddress);
 
-				upVote.setText(upVotes + "");
+				
 				upVote.setVisibility(View.VISIBLE);
-
-				downVote.setText(downVotes + "");
 				downVote.setVisibility(View.VISIBLE);
-
+			
+				// TODO: Disable up vote image when the mcdId has already up voted
+				if(voteType != null 
+						&& voteType.equals("UPVOTE"))
+				{
+					upVote.setClickable(false);
+					upVote.setEnabled(false);
+					
+				}
+				else if(voteType != null
+						&& voteType.equals("DOWNVOTE"))
+				{
+					downVote.setClickable(false);
+					downVote.setEnabled(false);
+				}
+				upVoteCount.setVisibility(View.VISIBLE);
+				upVoteCount.setText(upVotes + "");
+				downVoteCount.setVisibility(View.VISIBLE);
+				downVoteCount.setText(downVotes + "");
 				JSONArray pricingList = parkingLocation
 						.getJSONArray(JSONKeys.PRICING_DETAILS_LIST);
 
@@ -373,6 +510,37 @@ public class DisplayDetailsActivity extends Activity implements OnClickListener 
 		}
 		return dayOfWeek;
 	}
+	
+	public void setFieldsOnVoteType(String result,String voteType) 
+	{
+		if(voteType != null&& voteType.equals("UPVOTE"))
+		{
+			upVote.setClickable(false);
+			upVote.setEnabled(false);
+			upVoteCount.setText(result);
+		}
+		else if(voteType != null&& voteType.equals("DOWNVOTE"))
+		{
+			downVote.setClickable(false);
+			downVote.setEnabled(false);
+			downVoteCount.setText(result);
+		}
+	}
+	
+	public void onVoteBtnClicked(View v){
+		String voteType = null;
+	    if(v.getId() == R.id.icon_up_vote){
+	       voteType = "UPVOTE";
+	    }
+	    else if(v.getId() == R.id.icon_down_vote)
+	    {
+	    	voteType = "DOWNVOTE";
+	    }
+	    
+	    SaveVotingDetails saveVoteAsyncTask = new SaveVotingDetails(
+				this);
+	    saveVoteAsyncTask.execute(parkingLocationId,voteType);
+	}
 
 	/**
 	 * Async task to fetch parking locations from DB
@@ -426,6 +594,9 @@ public class DisplayDetailsActivity extends Activity implements OnClickListener 
 					.toString()));
 			System.out.print("ID: " + id);
 
+			nameValuePairs.add(new BasicNameValuePair(JSONKeys.MCD_ID,androidId));
+			
+			
 			byte[] bytes = null;
 
 			try {
@@ -476,5 +647,102 @@ public class DisplayDetailsActivity extends Activity implements OnClickListener 
 		// TODO Auto-generated method stub
 
 	}
+
+	/**
+	 * Async task to fetch parking locations from DB
+	 * 
+	 */
+	private class SaveVotingDetails extends
+			AsyncTask<Object, Void, byte[]> {
+
+		private Context context;
+
+		public SaveVotingDetails(Context context) {
+			this.context = context;
+
+		}
+
+		// check Internet conenction.
+		private void checkInternetConenction() {
+			ConnectivityManager check = (ConnectivityManager) this.context
+					.getSystemService(Context.CONNECTIVITY_SERVICE);
+			if (check != null) {
+				NetworkInfo[] info = check.getAllNetworkInfo();
+				if (info != null)
+					for (int i = 0; i < info.length; i++)
+						if (info[i].getState() == NetworkInfo.State.CONNECTED) {
+							Toast.makeText(context, "Internet is connected",
+									Toast.LENGTH_SHORT).show();
+						}
+
+			} else {
+				Toast.makeText(context, "not conencted to internet",
+						Toast.LENGTH_SHORT).show();
+			}
+		}
+
+		protected void onPreExecute() {
+			checkInternetConenction();
+		}
+
+		@Override
+		protected byte[] doInBackground(Object... params) {
+
+			HttpClient httpClient = new DefaultHttpClient();
+			HttpPost httpPost = new HttpPost(
+					ServerUtils
+							.getFullUrl(ServerUtils.SAVE_VOTE_DETAILS_PATH));
+			List<NameValuePair> nameValuePairs = new ArrayList<NameValuePair>();
+
+			Object idObj = (params[0] != null) ? params[0] : 0;
+			Integer id = (Integer) idObj;
+			
+			nameValuePairs.add(new BasicNameValuePair(JSONKeys.LOCATION_ID, id
+					.toString()));
+			System.out.print("ID: " + id);
+			voteType = params[1].toString();
+			nameValuePairs.add(new BasicNameValuePair(JSONKeys.MCD_ID,androidId));
+			nameValuePairs.add(new BasicNameValuePair(JSONKeys.VOTE_TYPE,voteType));
+						
+			byte[] bytes = null;
+
+			try {
+				// add data
+
+				httpPost.setEntity(new UrlEncodedFormEntity(nameValuePairs));
+
+				// Execute HTTP Post Request
+				HttpResponse response = httpClient.execute(httpPost);
+
+				if (HttpStatus.SC_OK == response.getStatusLine()
+						.getStatusCode()) {
+					InputStream in = response.getEntity().getContent();
+					bytes = IOUtils.toByteArray(in);
+
+				}
+			} catch (ClientProtocolException e) {
+				Toast.makeText(context, "Failed to fetch data from server!",
+						Toast.LENGTH_SHORT).show();
+			} catch (IOException e) {
+				Toast.makeText(context, "Failed to fetch data from server!",
+						Toast.LENGTH_SHORT).show();
+			}
+
+			return bytes;
+		}
+
+		@Override
+		protected void onPostExecute(byte[] result2) {
+				if (result2 != null) {
+					setFieldsOnVoteType(new String(result2),voteType);
+					voteType = null;
+				}
+				else {
+					Log.d(TAG, "Error while saving vote information on server.");
+				}
+		}
+	}
+			
+			
 
 }

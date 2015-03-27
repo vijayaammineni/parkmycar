@@ -29,6 +29,10 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+
+
+
+
 //github.com/vijayaammineni/parkmycar.git
 import android.app.Activity;
 import android.app.AlarmManager;
@@ -121,12 +125,18 @@ public class MainActivity extends ActionBarActivity implements SensorEventListen
 	boolean isLocationStored = false;
 	
 	boolean isNavigatingToParkingLocation = false;
+	
+	Double carLocationLat = null;
+	Double carLocationLng = null;
+	
+	private TimerTask askUserFeedbackTask;
+	private Timer timer = new Timer();
 
 	//Broadcast receiver for receiving the location change events
 	private BroadcastReceiver broadcastReceiver = new BroadcastReceiver() {
 
 		@Override
-		public void onReceive(Context context, Intent intent) {
+		public void onReceive(final Context context, Intent intent) {
 			Bundle bundle = intent.getExtras();
 			if (LocationUtils.LOCATION_CHANGE_BROADCAST_ACTION.equals(intent.getAction())
 					&& bundle != null) {
@@ -152,41 +162,108 @@ public class MainActivity extends ActionBarActivity implements SensorEventListen
 							getString(R.string.Destination_Location_Longitude), 0));	
 					final Integer destPLId = sharedPref.getInt(
 							getString(R.string.Destination_Parking_Location_Id), 0);	
-					String destPLName = sharedPref.getString(
+					final String destPLName = sharedPref.getString(
 							getString(R.string.Destination_Parking_Location_Name), "Unknown");	
 					
 					Double distance = LocationUtils.distance(destLocationLat, 
 							destLocationLng, latitude, longitude, 'M');
 					if(distance.compareTo(LocationUtils.DEFAULT_PARKING_LOCATION_RADIUS) <= 0)
 					{
-						LocationUtils.stopLocationChangeService(context);
-						ufUtils.showFeedbackPopup (destPLId, 
-			        		String.format(UserFeedbackUtils.PARKING_LOT_CAR_PARKED_FEEDBACK_STR, destPLName), UserFeedbackType.PARKED, null,
-			        		new DialogInterface.OnClickListener() {	
+						//mark that the user has reached the location
+						SharedPreferences.Editor editor = sharedPref.edit();
+						editor.putBoolean(
+								getString(R.string.reachedDestination), true);
+						editor.commit();
+						if (askUserFeedbackTask == null) {
+							askUserFeedbackTask = new TimerTask() {							
 								@Override
-								public void onClick(DialogInterface dialog, int which) {
-									ufUtils.update(UserFeedbackType.PARKED, destPLId);
-									dialog.cancel();
-									//we are asking for availability feedback here because if user hasn't responded to this then dont 
-									//bother user by asking about availability
-									ufUtils.createAvailabilityFeedbackPopup(pId);
+								public void run() {
+									LocationUtils.stopLocationChangeService(context);						
+									ufUtils.showFeedbackPopup (destPLId, 
+						        		String.format(UserFeedbackUtils.PARKING_LOT_CAR_PARKED_FEEDBACK_STR, destPLName), UserFeedbackType.PARKED, null,
+						        		new DialogInterface.OnClickListener() {	
+											@Override
+											public void onClick(DialogInterface dialog, int which) {
+												ufUtils.update(UserFeedbackType.PARKED, destPLId, false);
+												dialog.cancel();
+												//we are asking for availability feedback here because if user hasn't responded to this then dont 
+												//bother user by asking about availability
+												ufUtils.createAvailabilityFeedbackPopup(pId);
+											}
+										}, null);
 								}
-							}, null);
+							};
+							timer.schedule(askUserFeedbackTask, new Date(System.currentTimeMillis() + (5 * 60 * 1000)));
+						}
+						
 					}					
 				}
 			}
 			else if (MotionSensorUpdatesService.WALKING.equals(intent.getAction())) {
 				//TBD: see if the user is inside a parking lot, if so record that the user has parked the car here
 				Log.d(TAG,  "User is walking!");
-				Toast.makeText(context,  "User is walking!", Toast.LENGTH_LONG).show();
+				final Integer destPLId = sharedPref.getInt(
+						getString(R.string.Destination_Parking_Location_Id), 0);	
+				final String destPLName = sharedPref.getString(
+						getString(R.string.Destination_Parking_Location_Name), "Unknown");	
+				
+				if (isNavigatingToParkingLocation
+						&& destPLId != null
+						&& destPLName != null && !destPLName.equals("Unknown")) {
+					String lastMotionType = sharedPref.getString(
+							getString(R.string.lastMotionType), null);
+					Boolean reachedLocation = sharedPref.getBoolean(
+							getString(R.string.reachedDestination), false);
+					if (reachedLocation.booleanValue() 
+							&& lastMotionType != null
+								&& lastMotionType.equals(MotionSensorUpdatesService.DRIVING)) {
+						//we have found that user was last driving and now walking after parking the vehicle
+						timer.cancel();
+						ufUtils.update(UserFeedbackType.PARKED, destPLId, true);
+						clearAllNavigationParams();
+						MotionSensorUpdatesService.stopMotionSensorUpdatesService(context);
+					}
+				}
+				int speed = intent.getIntExtra("Speed", 0);
+				//Toast.makeText(context, "User is walking at a speed of: " + speed + " m/sec", Toast.LENGTH_LONG).show();
 			}
 			else if (MotionSensorUpdatesService.DRIVING.equals(intent.getAction())) {
-				//TBD: see if the user is inside a parking lot, if so record he/she has checked out now
 				Log.d(TAG,  "User is driving!");
-				Toast.makeText(context, "User is driving!", Toast.LENGTH_LONG).show();
+				if (isNavigatingToParkingLocation) {
+					String lastMotionType = sharedPref.getString(
+							getString(R.string.lastMotionType), null);
+					Boolean reachedLocation = sharedPref.getBoolean(
+							getString(R.string.reachedDestination), false);
+					if (lastMotionType == null
+							&& !reachedLocation.booleanValue()) {
+						//we now store that the user started driving
+						SharedPreferences.Editor editor = sharedPref.edit();
+						editor.putString(
+								getString(R.string.lastMotionType), MotionSensorUpdatesService.DRIVING);
+						editor.commit();
+					}
+				}
+				int speed = intent.getIntExtra("Speed", 0);
+				//Toast.makeText(context, "User is driving at a speed of: " + speed + " m/sec", Toast.LENGTH_LONG).show();
 			}
 		}
 	};
+	
+	private void clearAllNavigationParams() {
+		SharedPreferences.Editor editor = sharedPref.edit();
+		editor.putLong(
+				getString(R.string.Destination_Location_Latitude), 0);
+		editor.putLong(
+				getString(R.string.Destination_Location_Longitude), 0);
+		editor.putBoolean(
+				getString(R.string.isNavigatingToParkingLocation), false);
+		editor.putLong("Time_Navigation_Started", 0);
+		editor.putInt(
+				getString(R.string.Destination_Parking_Location_Id), 0);
+		editor.putString(
+				getString(R.string.Destination_Parking_Location_Name), null);
+		editor.commit();		
+	}
 
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -227,9 +304,17 @@ public class MainActivity extends ActionBarActivity implements SensorEventListen
 		
 		isNavigatingToParkingLocation = sharedPref.getBoolean(
 				getString(R.string.isNavigatingToParkingLocation), false);
+		
+		Long timeNavigationStarted = sharedPref.getLong(
+				"Time_Navigation_Started", 0);
+		Long currentTime = System.currentTimeMillis();
+		
+		//see if the destination parameters have expired, 
+		//TBD: ideally the duration should be calculated based on distance from current location
+		if (currentTime == 0 || (currentTime - timeNavigationStarted) > (30 * 60 * 1000)) {
+			clearAllNavigationParams();			
+		}
 
-		Double carLocationLat = null;
-		Double carLocationLng = null;
 		if (isLocationStored) {
 			saveButton.setEnabled(false);
 			layout.setVisibility(View.VISIBLE);
@@ -252,22 +337,12 @@ public class MainActivity extends ActionBarActivity implements SensorEventListen
 					currentLocation.getLongitude());
 			googleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(
 					currentCoordinates, LocationUtils.DEFAULT_ZOOM_LEVEL));
-			if (isLocationStored) {
-				if (carMarker != null) {
-					carMarker.remove();
-				}
-				carMarker = lu.addCarMarker(googleMap, new LatLng(
-						carLocationLat, carLocationLng));
-			}
+			
 		} else if (isLocationStored) {
 			googleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(
 					new LatLng(carLocationLat, carLocationLng),
 					currentZoom));
-			if (carMarker != null) {
-				carMarker.remove();
-			}
-			carMarker = lu.addCarMarker(googleMap, new LatLng(carLocationLat,
-					carLocationLng));
+			
 		} else {
 			//googleMap.setMyLocationEnabled(true);
 			googleMap.animateCamera(CameraUpdateFactory.newLatLngZoom(
@@ -276,7 +351,13 @@ public class MainActivity extends ActionBarActivity implements SensorEventListen
 							currentZoom));
 		}
 
-		
+		if (isLocationStored) {
+			if (carMarker != null) {
+				carMarker.remove();
+			}
+			carMarker = lu.addCarMarker(googleMap, new LatLng(
+					carLocationLat, carLocationLng));
+		}
 	
 		if (Intent.ACTION_SEARCH.equals(intent.getAction())) {
 			address = intent.getStringExtra(SearchManager.QUERY);
@@ -501,7 +582,7 @@ public class MainActivity extends ActionBarActivity implements SensorEventListen
 					new DialogInterface.OnClickListener() {				
 				@Override
 				public void onClick(DialogInterface dialog, int which) {
-					ufUtils.update(UserFeedbackType.CHECKOUT, pId);
+					ufUtils.update(UserFeedbackType.CHECKOUT, pId, false);
 					dialog.cancel();
 					//TBD: also ask about the available parkng lots
 				}
@@ -849,6 +930,13 @@ public class MainActivity extends ActionBarActivity implements SensorEventListen
 					googleMap.moveCamera(CameraUpdateFactory.newLatLngZoom(
 							new LatLng(result.getLatitude(), result
 									.getLongitude()), currentZoom));
+					if (isLocationStored) {
+						if (carMarker != null) {
+							carMarker.remove();
+						}
+						carMarker = lu.addCarMarker(googleMap, new LatLng(
+								carLocationLat, carLocationLng));
+					}
 				}
 
 			} catch (JSONException e) {
